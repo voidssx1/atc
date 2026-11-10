@@ -28,6 +28,8 @@
 }
 
 .blank-page {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   min-height: 100svh;
   background-color: var(--bg);
@@ -36,8 +38,201 @@
   align-items: center;
 }
 
+/* ─── Cards Section Geometric Background ─────────────────────── */
+.cards-geo-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Corner & Ambient Backdrop Geometry */
+.cards-geo-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cards-geo-backdrop .svg-line   { stroke: var(--line); }
+.cards-geo-backdrop .svg-circle { stroke: var(--line); }
+.cards-geo-backdrop .svg-dot    { fill:   var(--dot); }
+.cards-geo-backdrop .svg-plus   { stroke: var(--plus); }
+.cards-geo-backdrop .svg-ch     { stroke: var(--crosshair); }
+
+/* Sweeping outer corner arcs drift subtly when static */
+.cards-corner-arc-1 {
+  transform-origin: 160px 180px;
+  animation: subtleArcDrift1 16s ease-in-out infinite alternate;
+}
+
+.cards-corner-arc-2 {
+  transform-origin: 1440px 820px;
+  animation: subtleArcDrift2 18s ease-in-out infinite alternate;
+}
+
+@keyframes subtleArcDrift1 {
+  0% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.02) rotate(1.2deg); }
+  100% { transform: scale(0.99) rotate(-1deg); }
+}
+
+@keyframes subtleArcDrift2 {
+  0% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(0.98) rotate(-1.5deg); }
+  100% { transform: scale(1.015) rotate(1deg); }
+}
+
+/* Corner plus and dot grids follow cursor (matching hero) */
+.cards-plus-grid {
+  transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.cards-dot-grid {
+  transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* Corner crosshairs follow cursor and breathe subtly */
+.cards-geo-backdrop .crosshair-marker {
+  transform: translate(var(--shift-crosshair-x, 0px), var(--shift-crosshair-y, 0px));
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* 3D Scene Viewport: follows cursor subtly */
+.cards-geo-scene {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(1160px, 96vw);
+  height: min(1160px, 96vw);
+  transform: translate(calc(-50% + var(--shift-circles-x, 0px)), calc(-50% + var(--shift-circles-y, 0px)));
+  transition: transform 0.14s cubic-bezier(0.2, 0, 0.2, 1);
+  perspective: 1100px;
+  perspective-origin: 50% 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cards-geo-rig {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50% 0;
+  transform: rotateX(var(--shift-orbit-tilt-x, 0deg)) rotateY(var(--shift-orbit-tilt-y, 0deg));
+  transition: transform 0.16s cubic-bezier(0.2, 0, 0.2, 1);
+  animation: cardsOrbitBreathe 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.cards-geo-inner-rig {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50% 0;
+  animation: cardsInnerOrbitBreathe 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes cardsOrbitBreathe {
+  0% {
+    transform: rotateX(var(--shift-orbit-tilt-x, 0deg)) rotateY(var(--shift-orbit-tilt-y, 0deg)) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(calc(var(--shift-orbit-tilt-x, 0deg) + 1.8deg)) rotateY(calc(var(--shift-orbit-tilt-y, 0deg) + 2.2deg)) rotateZ(1.2deg);
+  }
+  100% {
+    transform: rotateX(calc(var(--shift-orbit-tilt-x, 0deg) - 1.5deg)) rotateY(calc(var(--shift-orbit-tilt-y, 0deg) - 1.8deg)) rotateZ(-1deg);
+  }
+}
+
+@keyframes cardsInnerOrbitBreathe {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(-2deg) rotateY(-2.4deg) rotateZ(-1.5deg);
+  }
+  100% {
+    transform: rotateX(1.6deg) rotateY(1.8deg) rotateZ(1.2deg);
+  }
+}
+
+/* Rings in 3D */
+.cards-geo-ring {
+  position: absolute;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  box-sizing: border-box;
+}
+
+/* Outer primary ring */
+.cards-ring-outer {
+  inset: 0;
+  border: 1px solid var(--line);
+  opacity: 0.6;
+}
+
+/* Tilted orbital meridian rings */
+.cards-ring-orbit-1 {
+  inset: 0;
+  border: 1px solid var(--line);
+  transform: rotateX(66deg) rotateY(18deg);
+  opacity: 0.5;
+}
+
+.cards-ring-orbit-2 {
+  inset: 8%;
+  border: 1px solid var(--line);
+  transform: rotateX(-48deg) rotateY(52deg);
+  opacity: 0.45;
+}
+
+.cards-ring-orbit-3 {
+  inset: 14%;
+  border: 1px solid var(--line);
+  transform: rotateX(74deg) rotateY(-34deg);
+  opacity: 0.4;
+}
+
+/* Equatorial construction ring */
+.cards-ring-equator {
+  inset: 0;
+  border: 1px dashed var(--line);
+  transform: rotateX(84deg);
+  opacity: 0.32;
+}
+
+/* Inner concentric sphere rings */
+.cards-ring-inner {
+  top: 24%;
+  left: 24%;
+  width: 52%;
+  height: 52%;
+  border: 1px solid var(--line);
+  opacity: 0.58;
+}
+
+.cards-ring-inner-orbit {
+  top: 24%;
+  left: 24%;
+  width: 52%;
+  height: 52%;
+  border: 1px solid var(--line);
+  transform: rotateX(55deg) rotateY(-30deg);
+  opacity: 0.42;
+}
+
 .second-page-grid {
   position: relative;
+  z-index: 2;
   width: min(1180px, 100%);
   margin: 0 auto;
   display: grid;
@@ -215,19 +410,18 @@
 /* Outer sphere construction: rotates clockwise with scroll */
 .geo-sphere-outer-group {
   transform-origin: 1162px 502px;
-  transform: translate(var(--scroll-sphere-outer-x, 0px), var(--scroll-sphere-outer-y, 0px)) rotate(var(--scroll-sphere-outer-rot, 0deg));
+  transform: rotate(var(--scroll-sphere-outer-rot, 0deg));
   will-change: transform;
 }
 
 /* Inner concentric sphere construction: rotates counter-clockwise with scroll */
 .geo-sphere-inner-group {
   transform-origin: 1162px 502px;
-  transform: translate(var(--scroll-sphere-inner-x, 0px), var(--scroll-sphere-inner-y, 0px)) rotate(var(--scroll-sphere-inner-rot, 0deg));
+  transform: rotate(var(--scroll-sphere-inner-rot, 0deg));
   will-change: transform;
 }
 
 .geo-circle-arc {
-  transform: translateY(var(--scroll-c-arc-y, 0px));
   will-change: transform;
 }
 
@@ -299,9 +493,15 @@
   will-change: transform;
 }
 
-.geo-center-marker {
-  transform: translate(calc(var(--shift-circles-x, 0px) * 0.4), calc(var(--shift-circles-y, 0px) * 0.4 + var(--scroll-c-orbit-y, 0px) * 0.5));
-  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+/* Fixed Non-Scrolling Markers in hero section */
+.geo-fixed-markers {
+  pointer-events: none;
+}
+
+.geo-center-marker,
+.geo-right-bar,
+.geo-left-bar {
+  transform: none !important;
 }
 
 /* Header */

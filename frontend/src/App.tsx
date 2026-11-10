@@ -99,6 +99,7 @@ function resetCardTilt(event: ReactPointerEvent<HTMLElement>) {
 // ─── Component ────────────────────────────────────────────────
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const cardsSectionRef = useRef<HTMLElement>(null);
 
   const [theme, setTheme]           = useState<Theme>(getInitialTheme);
   const [activeHash, setActiveHash] = useState<string>(() => window.location.hash || '#home');
@@ -113,6 +114,12 @@ export default function App() {
   for (let x = 12; x <= 270; x += 15.2) dotCols.push(x);
   const dotRows: number[] = [];
   for (let y = 680; y <= 918; y += 15.2) dotRows.push(y);
+
+  // Cards section corner dot grid
+  const cardsDotCols: number[] = [];
+  for (let x = 40; x <= 280; x += 18) cardsDotCols.push(x);
+  const cardsDotRows: number[] = [];
+  for (let y = 720; y <= 940; y += 18) cardsDotRows.push(y);
 
   // ── Apply theme to <html> and persist ──────────────────────
   useEffect(() => {
@@ -219,13 +226,6 @@ export default function App() {
         containerRef.current.style.setProperty('--scroll-sphere-outer-rot', `${(s * 0.08).toFixed(2)}deg`);
         containerRef.current.style.setProperty('--scroll-sphere-inner-rot', `${(s * -0.10).toFixed(2)}deg`);
 
-        // 3D Parallax position shifts
-        containerRef.current.style.setProperty('--scroll-sphere-outer-x', `${(s * 0.02).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-sphere-outer-y', `${(s * -0.06).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-sphere-inner-x', `${(s * -0.04).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-sphere-inner-y', `${(s * -0.14).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-c-arc-y',        `${(s * -0.03).toFixed(2)}px`);
-
         // Construction lines parallax
         containerRef.current.style.setProperty('--scroll-line-h-y', `${(s * -0.05).toFixed(2)}px`);
         containerRef.current.style.setProperty('--scroll-line-v-y', `${(s * -0.11).toFixed(2)}px`);
@@ -236,6 +236,17 @@ export default function App() {
         containerRef.current.style.setProperty('--scroll-ch-lr-y',     `${(s * -0.15).toFixed(2)}px`);
         containerRef.current.style.setProperty('--scroll-grid-plus-y', `${(s * -0.06).toFixed(2)}px`);
         containerRef.current.style.setProperty('--scroll-grid-dot-y',  `${(s * -0.10).toFixed(2)}px`);
+      }
+
+      if (cardsSectionRef.current && !isTouch) {
+        cardsSectionRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-grid-y',    `${(currentMouseY * -6).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-orbit-tilt-x', `${(currentMouseY * -5).toFixed(2)}deg`);
+        cardsSectionRef.current.style.setProperty('--shift-orbit-tilt-y', `${(currentMouseX * 5).toFixed(2)}deg`);
       }
       animId = requestAnimationFrame(tick);
     };
@@ -305,8 +316,6 @@ export default function App() {
             <circle className="svg-circle geo-orbital-ring" cx="1015" cy="482" r="373" strokeWidth="1" />
             {/* Equatorial construction arc across outer sphere */}
             <path className="svg-circle" d="M 700 502 A 462 200 0 0 0 1624 502" strokeWidth="0.8" opacity="0.45" />
-            {/* Right circumference edge bar */}
-            <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
           </g>
 
           {/* Inner Concentric Sphere Geometry (rotates counter-clockwise with scroll) */}
@@ -315,13 +324,15 @@ export default function App() {
             <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
             {/* Inner intersecting orbital meridian arc */}
             <path className="svg-circle" d="M 972 502 A 200 236 0 0 1 1352 502" strokeWidth="0.9" opacity="0.6" />
-            {/* Center marker */}
-            <rect className="svg-bar geo-center-marker" x="1159" y="499" width="6" height="6" />
           </g>
         </g>
 
-        {/* Left edge bar */}
-        <rect className="svg-bar geo-edge-bar geo-left-bar"  x="54"   y="340" width="30" height="9" rx="1.5" />
+        {/* Fixed Non-Scrolling Markers (Never rotate or translate when scrolling) */}
+        <g className="geo-fixed-markers">
+          <rect className="svg-bar geo-edge-bar geo-left-bar"  x="54"   y="340" width="30" height="9" rx="1.5" />
+          <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
+          <rect className="svg-bar geo-center-marker"          x="1159" y="499" width="6"  height="6" />
+        </g>
 
         {/* Crosshairs */}
         <g className="geo-crosshairs">
@@ -468,7 +479,98 @@ export default function App() {
         </div>
       </main>
     </div>
-    <section className="blank-page" aria-label="Explore the Alan Turing Club">
+    <section className="blank-page" ref={cardsSectionRef} aria-label="Explore the Alan Turing Club">
+      {/* ── Cards Section Geometric Background ──────────────── */}
+      <div className="cards-geo-container" aria-hidden="true">
+        {/* Corner & Ambient Technical Geometry */}
+        <svg
+          className="cards-geo-backdrop"
+          viewBox="0 0 1600 1000"
+          preserveAspectRatio="xMidYMid slice"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Static Full-Bleed Construction Lines */}
+          <line className="svg-line" x1="0" y1="500" x2="1600" y2="500" strokeWidth="1" opacity="0.4" />
+          <line className="svg-line" x1="800" y1="0" x2="800" y2="1000" strokeWidth="1" opacity="0.4" />
+
+          {/* Corner Framing Lines */}
+          <line className="svg-line" x1="50" y1="110" x2="420" y2="110" strokeWidth="1" opacity="0.35" />
+          <line className="svg-line" x1="50" y1="40" x2="50" y2="220" strokeWidth="1" opacity="0.35" />
+          <line className="svg-line" x1="1180" y1="890" x2="1550" y2="890" strokeWidth="1" opacity="0.35" />
+          <line className="svg-line" x1="1550" y1="780" x2="1550" y2="960" strokeWidth="1" opacity="0.35" />
+
+          {/* Sweeping Outer Corner Arcs to fill corners */}
+          <circle className="svg-circle cards-corner-arc-1" cx="160" cy="180" r="540" strokeWidth="1" opacity="0.3" />
+          <circle className="svg-circle cards-corner-arc-2" cx="1440" cy="820" r="580" strokeWidth="1" opacity="0.25" />
+
+          {/* Top-Right Plus Grid */}
+          <g className="cards-plus-grid" opacity="0.55">
+            {[70, 118, 166, 214, 262].map((py, ri) =>
+              [1360, 1408, 1456, 1504, 1552].map((px, ci) => (
+                <g key={`cplus-${ri}-${ci}`}>
+                  <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
+                  <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
+                </g>
+              ))
+            )}
+          </g>
+
+          {/* Bottom-Left Dot Grid */}
+          <g className="cards-dot-grid">
+            {cardsDotRows.map((dy, rIndex) =>
+              cardsDotCols.map((dx, cIndex) => {
+                const colRatio = (dx - 40) / (280 - 40);
+                const rowRatio = (dy - 720) / (940 - 720);
+                const op = Math.max(0.12, 0.68 - colRatio * 0.42 - (1 - rowRatio) * 0.3);
+                return (
+                  <circle key={`cdot-${rIndex}-${cIndex}`} className="svg-dot" cx={dx} cy={dy} r="1.3" opacity={op} />
+                );
+              })
+            )}
+          </g>
+
+          {/* Corner Crosshairs */}
+          <g className="crosshair-marker">
+            {/* Top-Left Main Crosshair */}
+            <line className="svg-ch" x1="45" y1="65" x2="77" y2="65" strokeWidth="1.2" />
+            <line className="svg-ch" x1="61" y1="49" x2="61" y2="81" strokeWidth="1.2" />
+
+            {/* Bottom-Right Main Crosshair */}
+            <line className="svg-ch" x1="1520" y1="935" x2="1552" y2="935" strokeWidth="1.2" />
+            <line className="svg-ch" x1="1536" y1="919" x2="1536" y2="951" strokeWidth="1.2" />
+
+            {/* Top-Right Sub Crosshair */}
+            <line className="svg-ch" x1="1310" y1="65" x2="1334" y2="65" strokeWidth="1.1" opacity="0.65" />
+            <line className="svg-ch" x1="1322" y1="53" x2="1322" y2="77" strokeWidth="1.1" opacity="0.65" />
+
+            {/* Bottom-Left Sub Crosshair */}
+            <line className="svg-ch" x1="300" y1="935" x2="324" y2="935" strokeWidth="1.1" opacity="0.65" />
+            <line className="svg-ch" x1="312" y1="923" x2="312" y2="947" strokeWidth="1.1" opacity="0.65" />
+          </g>
+        </svg>
+
+        {/* 3D Rotating Sphere / Orbital Structure */}
+        <div className="cards-geo-scene">
+          <div className="cards-geo-rig">
+            {/* Primary Outer Ring */}
+            <div className="cards-geo-ring cards-ring-outer" />
+
+            {/* Orbital Meridian Rings */}
+            <div className="cards-geo-ring cards-ring-orbit-1" />
+            <div className="cards-geo-ring cards-ring-orbit-2" />
+            <div className="cards-geo-ring cards-ring-orbit-3" />
+            <div className="cards-geo-ring cards-ring-equator" />
+
+            {/* Inner Concentric 3D Rig */}
+            <div className="cards-geo-inner-rig">
+              <div className="cards-geo-ring cards-ring-inner" />
+              <div className="cards-geo-ring cards-ring-inner-orbit" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="second-page-grid">
         {SECOND_PAGE_CARDS.map(({ title, artwork }) => (
           <article
