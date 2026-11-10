@@ -400,29 +400,26 @@
   }
 }
 
-/* ─── Parallax & Scroll-Driven Sphere Geometry ────────────────── */
+/* Continuous Subtle Geometric Orbit */
 .geo-interactive-circles {
   transform: translate(var(--shift-circles-x, 0px), var(--shift-circles-y, 0px));
   transition: transform 0.14s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
 }
 
-/* Outer sphere construction: rotates clockwise with scroll */
-.geo-sphere-outer-group {
+.geo-rotating-orbit {
   transform-origin: 1162px 502px;
-  transform: rotate(var(--scroll-sphere-outer-rot, 0deg));
+  animation: geoOrbit 140s linear infinite;
   will-change: transform;
 }
 
-/* Inner concentric sphere construction: rotates counter-clockwise with scroll */
-.geo-sphere-inner-group {
-  transform-origin: 1162px 502px;
-  transform: rotate(var(--scroll-sphere-inner-rot, 0deg));
-  will-change: transform;
-}
-
-.geo-circle-arc {
-  will-change: transform;
+@keyframes geoOrbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Parallax for horizontal & vertical crosshair construction lines */
@@ -493,15 +490,9 @@
   will-change: transform;
 }
 
-/* Fixed Non-Scrolling Markers in hero section */
-.geo-fixed-markers {
-  pointer-events: none;
-}
-
-.geo-center-marker,
-.geo-right-bar,
-.geo-left-bar {
-  transform: none !important;
+.geo-center-marker {
+  transform: translate(calc(var(--shift-circles-x, 0px) * 0.4), calc(var(--shift-circles-y, 0px) * 0.4));
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 /* Header */
@@ -1009,9 +1000,6 @@
   .geo-crosshairs,
   .geo-grids,
   .geo-center-marker,
-  .geo-sphere-outer-group,
-  .geo-sphere-inner-group,
-  .geo-circle-arc,
   .geo-line-h,
   .geo-line-v,
   .geo-line-h-sub,

@@ -222,9 +222,6 @@ export default function App() {
         }
 
         const s = currentScrollY;
-        // Sphere outer & inner rotation (clearly noticeable & counter-rotating)
-        containerRef.current.style.setProperty('--scroll-sphere-outer-rot', `${(s * 0.08).toFixed(2)}deg`);
-        containerRef.current.style.setProperty('--scroll-sphere-inner-rot', `${(s * -0.10).toFixed(2)}deg`);
 
         // Construction lines parallax
         containerRef.current.style.setProperty('--scroll-line-h-y', `${(s * -0.05).toFixed(2)}px`);
@@ -301,38 +298,21 @@ export default function App() {
           <line className="svg-line geo-line-v-sub" x1="55"   y1="10"  x2="55"   y2="180" strokeWidth="1" />
         </g>
 
-        {/* Interactive / Animated Circles & Sphere Geometry */}
+        {/* Interactive / Animated Circles */}
         <g className="geo-interactive-circles">
-          {/* Sweeping Arc across center-left */}
-          <circle className="svg-circle geo-circle-arc" cx="254" cy="712" r="729" strokeWidth="1" />
-
-          {/* Outer Sphere Construction (rotates clockwise with scroll) */}
-          <g className="geo-sphere-outer-group">
-            {/* Subtle tonal variation inside sphere */}
-            <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
-            {/* Primary Outer Circle */}
-            <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
-            {/* Outer intersecting orbital meridian */}
-            <circle className="svg-circle geo-orbital-ring" cx="1015" cy="482" r="373" strokeWidth="1" />
-            {/* Equatorial construction arc across outer sphere */}
-            <path className="svg-circle" d="M 700 502 A 462 200 0 0 0 1624 502" strokeWidth="0.8" opacity="0.45" />
+          <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
+          <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
+          <g className="geo-rotating-orbit">
+            <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
           </g>
-
-          {/* Inner Concentric Sphere Geometry (rotates counter-clockwise with scroll) */}
-          <g className="geo-sphere-inner-group">
-            {/* Concentric Inner Circle */}
-            <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
-            {/* Inner intersecting orbital meridian arc */}
-            <path className="svg-circle" d="M 972 502 A 200 236 0 0 1 1352 502" strokeWidth="0.9" opacity="0.6" />
-          </g>
+          <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
+          <circle className="svg-circle" cx="254"  cy="712" r="729" strokeWidth="1" />
         </g>
 
-        {/* Fixed Non-Scrolling Markers (Never rotate or translate when scrolling) */}
-        <g className="geo-fixed-markers">
-          <rect className="svg-bar geo-edge-bar geo-left-bar"  x="54"   y="340" width="30" height="9" rx="1.5" />
-          <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
-          <rect className="svg-bar geo-center-marker"          x="1159" y="499" width="6"  height="6" />
-        </g>
+        {/* Markers */}
+        <rect className="svg-bar geo-center-marker" x="1159" y="499" width="6"  height="6" />
+        <rect className="svg-bar geo-edge-bar geo-left-bar"  x="54"   y="340" width="30" height="9" rx="1.5" />
+        <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
 
         {/* Crosshairs */}
         <g className="geo-crosshairs">
