@@ -167,20 +167,16 @@ export default function App() {
     };
   }, []);
 
-  // ── Unified mouse & scrubbed scroll parallax loop ──────────
+  // ── Inertial mouse parallax loop (desktop only) ────────────
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (mediaQuery.matches) return;
-
-    const isTouch = window.matchMedia('(pointer: coarse)').matches;
+    if (window.matchMedia('(pointer: coarse)').matches) return;
 
     let targetMouseX = 0;
     let targetMouseY = 0;
     let currentMouseX = 0;
     let currentMouseY = 0;
-
-    let targetScrollY = window.scrollY;
-    let currentScrollY = window.scrollY;
     let animId: number;
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -192,50 +188,25 @@ export default function App() {
       targetMouseY = 0;
     };
 
-    const handleScroll = () => {
-      targetScrollY = window.scrollY;
-    };
-
-    if (!isTouch) {
-      window.addEventListener('mousemove', handleMouseMove, { passive: true });
-      window.addEventListener('mouseleave', handleMouseLeave);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('mouseleave', handleMouseLeave);
 
     const lerp = (s: number, e: number, f: number) => s + (e - s) * f;
 
     const tick = () => {
-      if (!isTouch) {
-        currentMouseX = lerp(currentMouseX, targetMouseX, 0.04);
-        currentMouseY = lerp(currentMouseY, targetMouseY, 0.04);
-      }
-      currentScrollY = lerp(currentScrollY, targetScrollY, 0.08);
+      currentMouseX = lerp(currentMouseX, targetMouseX, 0.04);
+      currentMouseY = lerp(currentMouseY, targetMouseY, 0.04);
 
       if (containerRef.current) {
-        if (!isTouch) {
-          containerRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
-          containerRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
-          containerRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
-          containerRef.current.style.setProperty('--shift-grid-y',    `${(currentMouseY * -6).toFixed(2)}px`);
-          containerRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
-          containerRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
-        }
-
-        const s = currentScrollY;
-
-        // Construction lines parallax
-        containerRef.current.style.setProperty('--scroll-line-h-y', `${(s * -0.05).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-line-v-y', `${(s * -0.11).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-line-v-x', `${(s * 0.03).toFixed(2)}px`);
-
-        // Crosshairs & grids parallax
-        containerRef.current.style.setProperty('--scroll-ch-ul-y',     `${(s * -0.07).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-ch-lr-y',     `${(s * -0.15).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-grid-plus-y', `${(s * -0.06).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--scroll-grid-dot-y',  `${(s * -0.10).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-grid-y',    `${(currentMouseY * -6).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
       }
 
-      if (cardsSectionRef.current && !isTouch) {
+      if (cardsSectionRef.current) {
         cardsSectionRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
@@ -250,11 +221,8 @@ export default function App() {
 
     animId = requestAnimationFrame(tick);
     return () => {
-      if (!isTouch) {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseleave', handleMouseLeave);
-      }
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleMouseLeave);
       cancelAnimationFrame(animId);
     };
   }, []);
@@ -300,13 +268,34 @@ export default function App() {
 
         {/* Interactive / Animated Circles */}
         <g className="geo-interactive-circles">
-          <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
-          <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
-          <g className="geo-rotating-orbit">
-            <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
+          {/* Outer circle: cx=1162, cy=502, r=462 */}
+          <g className="geo-circle-outer">
+            <g className="geo-float-outer">
+              <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
+              <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
+            </g>
           </g>
-          <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
-          <circle className="svg-circle" cx="254"  cy="712" r="729" strokeWidth="1" />
+
+          {/* Orbital circle: cx=1015, cy=482, r=373 */}
+          <g className="geo-circle-orbital">
+            <g className="geo-float-orbital">
+              <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
+            </g>
+          </g>
+
+          {/* Inner circle: cx=1162, cy=502, r=236 */}
+          <g className="geo-circle-inner">
+            <g className="geo-float-inner">
+              <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
+            </g>
+          </g>
+
+          {/* Large sweeping circle: cx=254, cy=712, r=729 */}
+          <g className="geo-circle-sweep">
+            <g className="geo-float-sweep">
+              <circle className="svg-circle" cx="254"  cy="712" r="729" strokeWidth="1" />
+            </g>
+          </g>
         </g>
 
         {/* Markers */}

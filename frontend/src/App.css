@@ -400,50 +400,79 @@
   }
 }
 
-/* Continuous Subtle Geometric Orbit */
+/* ─── Geometric Background Animation ──────────────────────────── */
+
+/* The interactive group is a passthrough container; transforms are applied per-circle */
 .geo-interactive-circles {
-  transform: translate(var(--shift-circles-x, 0px), var(--shift-circles-y, 0px));
-  transition: transform 0.14s cubic-bezier(0.2, 0, 0.2, 1);
+  /* No transform on group — each circle has its own parallax & floating layers */
+}
+
+/* ── Per-circle cursor parallax (outer layer, depth-scaled) ── */
+.geo-circle-outer {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.6),
+    calc(var(--shift-circles-y, 0px) * 0.6)
+  );
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
 }
 
-.geo-rotating-orbit {
-  transform-origin: 1162px 502px;
-  animation: geoOrbit 140s linear infinite;
+.geo-circle-orbital {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 1.0),
+    calc(var(--shift-circles-y, 0px) * 1.0)
+  );
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
 }
 
-@keyframes geoOrbit {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Parallax for horizontal & vertical crosshair construction lines */
-.geo-line-h {
-  transform: translateY(var(--scroll-line-h-y, 0px));
+.geo-circle-inner {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.8),
+    calc(var(--shift-circles-y, 0px) * 0.8)
+  );
+  transition: transform 0.16s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
 }
 
-.geo-line-v {
-  transform: translate(var(--scroll-line-v-x, 0px), var(--scroll-line-v-y, 0px));
+.geo-circle-sweep {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.3),
+    calc(var(--shift-circles-y, 0px) * 0.3)
+  );
+  transition: transform 0.26s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
 }
 
-.geo-line-h-sub {
-  transform: translateY(calc(var(--scroll-line-h-y, 0px) * 0.7));
-  will-change: transform;
+/* ── Idle float animations (inner layer, subtle 3–6px drift, out-of-phase) ── */
+@keyframes geoFloat1 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+@keyframes geoFloat2 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(4px); }
+}
+@keyframes geoFloat3 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-3px); }
+}
+@keyframes geoFloat4 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(6px); }
 }
 
-.geo-line-v-sub {
-  transform: translateY(calc(var(--scroll-line-v-y, 0px) * 0.6));
-  will-change: transform;
+.geo-float-outer   { animation: geoFloat1  9s ease-in-out infinite; }
+.geo-float-orbital { animation: geoFloat2 11s ease-in-out infinite; animation-delay: -3s; }
+.geo-float-inner   { animation: geoFloat3  7s ease-in-out infinite; animation-delay: -5s; }
+.geo-float-sweep   { animation: geoFloat4 13s ease-in-out infinite; animation-delay: -7s; }
+
+/* Construction lines: strictly static, anchored to original SVG coordinates */
+.geo-static-lines {
+  pointer-events: none;
 }
 
-/* Crosshair Markers */
+/* Crosshair Markers: responsive to cursor, subtle breathing, NO scroll movement */
 .geo-crosshairs {
   transform: translate(var(--shift-crosshair-x, 0px), var(--shift-crosshair-y, 0px));
   transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
@@ -452,16 +481,6 @@
 
 .crosshair-marker {
   animation: crosshairBreathing 6s ease-in-out infinite alternate;
-}
-
-.crosshair-ul {
-  transform: translateY(var(--scroll-ch-ul-y, 0px));
-  will-change: transform;
-}
-
-.crosshair-lr {
-  transform: translateY(var(--scroll-ch-lr-y, 0px));
-  will-change: transform;
 }
 
 @keyframes crosshairBreathing {
@@ -473,20 +492,10 @@
   }
 }
 
-/* Secondary Grids */
+/* Secondary Grids: responsive to cursor, anchored against scroll */
 .geo-grids {
   transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
   transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
-  will-change: transform;
-}
-
-.plus-grid {
-  transform: translateY(var(--scroll-grid-plus-y, 0px));
-  will-change: transform;
-}
-
-.dot-grid {
-  transform: translateY(var(--scroll-grid-dot-y, 0px));
   will-change: transform;
 }
 
@@ -991,23 +1000,22 @@
   .title-row-2,
   .title-sub,
   .crosshair-marker,
-  .geo-rotating-orbit {
+  .geo-float-outer,
+  .geo-float-orbital,
+  .geo-float-inner,
+  .geo-float-sweep {
     animation: none !important;
     opacity: 1 !important;
   }
 
   .geo-interactive-circles,
+  .geo-circle-outer,
+  .geo-circle-orbital,
+  .geo-circle-inner,
+  .geo-circle-sweep,
   .geo-crosshairs,
   .geo-grids,
-  .geo-center-marker,
-  .geo-line-h,
-  .geo-line-v,
-  .geo-line-h-sub,
-  .geo-line-v-sub,
-  .plus-grid,
-  .dot-grid,
-  .crosshair-ul,
-  .crosshair-lr {
+  .geo-center-marker {
     transform: none !important;
     transition: none !important;
   }
