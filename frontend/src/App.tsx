@@ -4,10 +4,10 @@ import cardIllustrations from './assets/card-illustrations.png';
 
 // ─── Nav items ───────────────────────────────────────────────
 const NAV_ITEMS = [
-  { label: 'HOME',      hash: '#home' },
-  { label: 'EVENTS',    hash: '#events' },
-  { label: 'PROJECTS',  hash: '#projects' },
-  { label: 'TEAM',      hash: '#team' },
+  { label: 'HOME', hash: '#home' },
+  { label: 'EVENTS', hash: '#events' },
+  { label: 'PROJECTS', hash: '#projects' },
+  { label: 'TEAM', hash: '#team' },
   { label: 'RESOURCES', hash: '#resources' },
 ] as const;
 
@@ -35,14 +35,14 @@ function ThemeIcon({ theme }: { theme: Theme }) {
   return theme === 'dark' ? (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="5" />
-      <line x1="12" y1="1"  x2="12" y2="3"  />
+      <line x1="12" y1="1" x2="12" y2="3" />
       <line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"  />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
       <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1"  y1="12" x2="3"  y2="12" />
+      <line x1="1" y1="12" x2="3" y2="12" />
       <line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36" />
-      <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"  />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
     </svg>
   ) : (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -58,6 +58,26 @@ function StylizedA({ className = 'lambda-glyph' }: { className?: string }) {
       <polygon points="40,0 60,0 96,87 72,87 50,22 28,87 4,87" fill="currentColor" />
       <polygon points="12,65 31,65 24,75 5,75" fill="currentColor" />
     </svg>
+  );
+}
+
+// ─── BrandText: replaces every uppercase A with the stylized glyph ──────────
+function BrandText({ children }: { children: string }) {
+  if (!children.includes('A')) return <>{children}</>;
+  const parts = children.split('A');
+  return (
+    <span aria-label={children}>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {part}
+          {i < parts.length - 1 && (
+            <span className="brand-stylized-a" aria-hidden="true">
+              <StylizedA />
+            </span>
+          )}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -101,9 +121,9 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardsSectionRef = useRef<HTMLElement>(null);
 
-  const [theme, setTheme]           = useState<Theme>(getInitialTheme);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [activeHash, setActiveHash] = useState<string>(() => window.location.hash || '#home');
-  const [menuOpen, setMenuOpen]     = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // 4×4 plus-sign grid in upper-right
   const plusCols = [1422, 1475, 1528, 1580];
@@ -200,8 +220,8 @@ export default function App() {
       if (containerRef.current) {
         containerRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
         containerRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-grid-y',    `${(currentMouseY * -6).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-grid-x', `${(currentMouseX * -6).toFixed(2)}px`);
+        containerRef.current.style.setProperty('--shift-grid-y', `${(currentMouseY * -6).toFixed(2)}px`);
         containerRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
         containerRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
       }
@@ -209,8 +229,8 @@ export default function App() {
       if (cardsSectionRef.current) {
         cardsSectionRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-grid-x',    `${(currentMouseX * -6).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-grid-y',    `${(currentMouseY * -6).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-grid-x', `${(currentMouseX * -6).toFixed(2)}px`);
+        cardsSectionRef.current.style.setProperty('--shift-grid-y', `${(currentMouseY * -6).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
         cardsSectionRef.current.style.setProperty('--shift-orbit-tilt-x', `${(currentMouseY * -5).toFixed(2)}deg`);
@@ -235,19 +255,19 @@ export default function App() {
 
   return (
     <div className="site-pages">
-    <div className="landing-container" ref={containerRef} id="home">
+      <div className="landing-container" ref={containerRef} id="home">
 
-      {/* ── Background Geometry ──────────────────────────────── */}
-      <svg
-        className="geometric-background"
-        viewBox="0 0 1648 928"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-      >
-        <defs>
-          <style>{`
+        {/* ── Background Geometry ──────────────────────────────── */}
+        <svg
+          className="geometric-background"
+          viewBox="0 0 1648 928"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+        >
+          <defs>
+            <style>{`
             .svg-line   { stroke: var(--line);       }
             .svg-circle { stroke: var(--line);       }
             .svg-dot    { fill:   var(--dot);        }
@@ -256,289 +276,289 @@ export default function App() {
             .svg-bar    { fill:   var(--bar);        }
             .svg-cfill  { fill:   var(--circle-fill);}
           `}</style>
-        </defs>
+          </defs>
 
-        {/* Static Construction Lines */}
-        <g className="geo-static-lines">
-          <line className="svg-line geo-line-h" x1="0"    y1="502" x2="1648" y2="502" strokeWidth="1" />
-          <line className="svg-line geo-line-v" x1="1162" y1="60"  x2="1162" y2="885" strokeWidth="1" />
-          <line className="svg-line geo-line-h-sub" x1="55"   y1="850" x2="770"  y2="850" strokeWidth="1" />
-          <line className="svg-line geo-line-v-sub" x1="55"   y1="10"  x2="55"   y2="180" strokeWidth="1" />
-        </g>
+          {/* Static Construction Lines */}
+          <g className="geo-static-lines">
+            <line className="svg-line geo-line-h" x1="0" y1="502" x2="1648" y2="502" strokeWidth="1" />
+            <line className="svg-line geo-line-v" x1="1162" y1="60" x2="1162" y2="885" strokeWidth="1" />
+            <line className="svg-line geo-line-h-sub" x1="55" y1="850" x2="770" y2="850" strokeWidth="1" />
+            <line className="svg-line geo-line-v-sub" x1="55" y1="10" x2="55" y2="180" strokeWidth="1" />
+          </g>
 
-        {/* Interactive / Animated Circles */}
-        <g className="geo-interactive-circles">
-          {/* Outer circle: cx=1162, cy=502, r=462 */}
-          <g className="geo-circle-outer">
-            <g className="geo-float-outer">
-              <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
-              <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
+          {/* Interactive / Animated Circles */}
+          <g className="geo-interactive-circles">
+            {/* Outer circle: cx=1162, cy=502, r=462 */}
+            <g className="geo-circle-outer">
+              <g className="geo-float-outer">
+                <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
+                <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
+              </g>
+            </g>
+
+            {/* Orbital circle: cx=1015, cy=482, r=373 */}
+            <g className="geo-circle-orbital">
+              <g className="geo-float-orbital">
+                <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
+              </g>
+            </g>
+
+            {/* Inner circle: cx=1162, cy=502, r=236 */}
+            <g className="geo-circle-inner">
+              <g className="geo-float-inner">
+                <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
+              </g>
+            </g>
+
+            {/* Large sweeping circle: cx=254, cy=712, r=729 */}
+            <g className="geo-circle-sweep">
+              <g className="geo-float-sweep">
+                <circle className="svg-circle" cx="254" cy="712" r="729" strokeWidth="1" />
+              </g>
             </g>
           </g>
 
-          {/* Orbital circle: cx=1015, cy=482, r=373 */}
-          <g className="geo-circle-orbital">
-            <g className="geo-float-orbital">
-              <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
+          {/* Markers */}
+          <rect className="svg-bar geo-center-marker" x="1159" y="499" width="6" height="6" />
+          <rect className="svg-bar geo-edge-bar geo-left-bar" x="54" y="340" width="30" height="9" rx="1.5" />
+          <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
+
+          {/* Crosshairs */}
+          <g className="geo-crosshairs">
+            <g className="crosshair-marker crosshair-ul">
+              <line className="svg-ch" x1="68" y1="125" x2="100" y2="125" strokeWidth="1.2" />
+              <line className="svg-ch" x1="84" y1="107" x2="84" y2="143" strokeWidth="1.2" />
+            </g>
+            <g className="crosshair-marker crosshair-lr">
+              <line className="svg-ch" x1="1527" y1="847" x2="1563" y2="847" strokeWidth="1.2" />
+              <line className="svg-ch" x1="1545" y1="825" x2="1545" y2="869" strokeWidth="1.2" />
             </g>
           </g>
 
-          {/* Inner circle: cx=1162, cy=502, r=236 */}
-          <g className="geo-circle-inner">
-            <g className="geo-float-inner">
-              <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
+          {/* Grids */}
+          <g className="geo-grids">
+            <g className="plus-grid">
+              {plusRows.map((py, ri) =>
+                plusCols.map((px, ci) => (
+                  <g key={`plus-${ri}-${ci}`} className="plus-mark">
+                    <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
+                    <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
+                  </g>
+                ))
+              )}
             </g>
-          </g>
-
-          {/* Large sweeping circle: cx=254, cy=712, r=729 */}
-          <g className="geo-circle-sweep">
-            <g className="geo-float-sweep">
-              <circle className="svg-circle" cx="254"  cy="712" r="729" strokeWidth="1" />
+            <g className="dot-grid">
+              {dotRows.map((dy, rIndex) =>
+                dotCols.map((dx, cIndex) => {
+                  const colRatio = (dx - 12) / (270 - 12);
+                  const rowRatio = (dy - 680) / (918 - 680);
+                  const op = Math.max(0.15, 0.82 - colRatio * 0.45 - (1 - rowRatio) * 0.35);
+                  return (
+                    <circle key={`dot-${rIndex}-${cIndex}`} className="svg-dot grid-dot" cx={dx} cy={dy} r="1.4" opacity={op} />
+                  );
+                })
+              )}
             </g>
-          </g>
-        </g>
-
-        {/* Markers */}
-        <rect className="svg-bar geo-center-marker" x="1159" y="499" width="6"  height="6" />
-        <rect className="svg-bar geo-edge-bar geo-left-bar"  x="54"   y="340" width="30" height="9" rx="1.5" />
-        <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
-
-        {/* Crosshairs */}
-        <g className="geo-crosshairs">
-          <g className="crosshair-marker crosshair-ul">
-            <line className="svg-ch" x1="68"   y1="125" x2="100"  y2="125" strokeWidth="1.2" />
-            <line className="svg-ch" x1="84"   y1="107" x2="84"   y2="143" strokeWidth="1.2" />
-          </g>
-          <g className="crosshair-marker crosshair-lr">
-            <line className="svg-ch" x1="1527" y1="847" x2="1563" y2="847" strokeWidth="1.2" />
-            <line className="svg-ch" x1="1545" y1="825" x2="1545" y2="869" strokeWidth="1.2" />
-          </g>
-        </g>
-
-        {/* Grids */}
-        <g className="geo-grids">
-          <g className="plus-grid">
-            {plusRows.map((py, ri) =>
-              plusCols.map((px, ci) => (
-                <g key={`plus-${ri}-${ci}`} className="plus-mark">
-                  <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
-                  <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
-                </g>
-              ))
-            )}
-          </g>
-          <g className="dot-grid">
-            {dotRows.map((dy, rIndex) =>
-              dotCols.map((dx, cIndex) => {
-                const colRatio = (dx - 12) / (270 - 12);
-                const rowRatio = (dy - 680) / (918 - 680);
-                const op = Math.max(0.15, 0.82 - colRatio * 0.45 - (1 - rowRatio) * 0.35);
-                return (
-                  <circle key={`dot-${rIndex}-${cIndex}`} className="svg-dot grid-dot" cx={dx} cy={dy} r="1.4" opacity={op} />
-                );
-              })
-            )}
-          </g>
-        </g>
-      </svg>
-
-      {/* ── Header ──────────────────────────────────────────── */}
-      <header className="site-header">
-        <div className="header-logo">
-          <span className="logo-text">
-            <span className="logo-stylized-a" aria-hidden="true">
-              <StylizedA />
-            </span>
-            <span className="sr-only">A</span>TC
-          </span>
-        </div>
-
-        {/* Desktop nav */}
-        <nav className="header-nav" aria-label="Main Navigation">
-          {NAV_ITEMS.map(({ label, hash }) => {
-            const isActive = activeHash === hash;
-            return (
-              <div key={hash} className={`nav-item${isActive ? ' active' : ''}`}>
-                <a href={hash} onClick={() => handleNavClick(hash)}>{label}</a>
-                {isActive ? <div className="nav-underline" /> : <div className="nav-hover-line" />}
-              </div>
-            );
-          })}
-          <button
-            className="theme-toggle"
-            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-          >
-            <ThemeIcon theme={theme} />
-          </button>
-        </nav>
-
-        {/* Mobile controls: theme toggle + hamburger */}
-        <div className="mobile-controls">
-          <button
-            className="theme-toggle"
-            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-          >
-            <ThemeIcon theme={theme} />
-          </button>
-          <button
-            className="hamburger"
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            {/* Three bars → X morphing via CSS */}
-            <span className={`ham-bar ham-bar-1${menuOpen ? ' open' : ''}`} />
-            <span className={`ham-bar ham-bar-2${menuOpen ? ' open' : ''}`} />
-            <span className={`ham-bar ham-bar-3${menuOpen ? ' open' : ''}`} />
-          </button>
-        </div>
-      </header>
-
-      {/* ── Mobile nav drawer ───────────────────────────────── */}
-      <div
-        className={`mobile-nav-overlay${menuOpen ? ' open' : ''}`}
-        onClick={() => setMenuOpen(false)}
-        aria-hidden={!menuOpen}
-      />
-      <nav
-        className={`mobile-nav-drawer${menuOpen ? ' open' : ''}`}
-        aria-label="Mobile Navigation"
-      >
-        {NAV_ITEMS.map(({ label, hash }) => {
-          const isActive = activeHash === hash;
-          return (
-            <a
-              key={hash}
-              href={hash}
-              className={`mobile-nav-item${isActive ? ' active' : ''}`}
-              onClick={() => handleNavClick(hash)}
-            >
-              {label}
-            </a>
-          );
-        })}
-      </nav>
-
-      {/* ── Hero ────────────────────────────────────────────── */}
-      <main className="hero-content">
-        <div className="title-lockup">
-          <h1 className="main-title">
-            <span className="title-row title-row-1">
-              <span className="letter-stylized-a" aria-hidden="true">
-                <StylizedA />
-              </span>
-              <span className="sr-only">A</span>
-              <span>L</span>
-              <span className="letter-stylized-a letter-stylized-a-second" aria-hidden="true">
-                <StylizedA />
-              </span>
-              <span className="sr-only">A</span>
-              <span>N</span>
-            </span>
-            <span className="title-row title-row-2">TURING</span>
-          </h1>
-          <div className="title-sub">
-            <span>C</span>
-            <span>L</span>
-            <span>U</span>
-            <span>B</span>
-          </div>
-        </div>
-      </main>
-    </div>
-    <section className="blank-page" ref={cardsSectionRef} aria-label="Explore the Alan Turing Club">
-      {/* ── Cards Section Geometric Background ──────────────── */}
-      <div className="cards-geo-container" aria-hidden="true">
-        {/* Corner & Ambient Technical Geometry */}
-        <svg
-          className="cards-geo-backdrop"
-          viewBox="0 0 1600 1000"
-          preserveAspectRatio="xMidYMid slice"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Static Full-Bleed Construction Lines */}
-          <line className="svg-line" x1="0" y1="500" x2="1600" y2="500" strokeWidth="1" opacity="0.4" />
-          <line className="svg-line" x1="800" y1="0" x2="800" y2="1000" strokeWidth="1" opacity="0.4" />
-
-          {/* Corner Framing Lines */}
-          <line className="svg-line" x1="50" y1="110" x2="420" y2="110" strokeWidth="1" opacity="0.35" />
-          <line className="svg-line" x1="50" y1="40" x2="50" y2="220" strokeWidth="1" opacity="0.35" />
-          <line className="svg-line" x1="1180" y1="890" x2="1550" y2="890" strokeWidth="1" opacity="0.35" />
-          <line className="svg-line" x1="1550" y1="780" x2="1550" y2="960" strokeWidth="1" opacity="0.35" />
-
-          {/* Sweeping Outer Corner Arcs to fill corners */}
-          <circle className="svg-circle cards-corner-arc-1" cx="160" cy="180" r="540" strokeWidth="1" opacity="0.3" />
-          <circle className="svg-circle cards-corner-arc-2" cx="1440" cy="820" r="580" strokeWidth="1" opacity="0.25" />
-
-          {/* Top-Right Plus Grid */}
-          <g className="cards-plus-grid" opacity="0.55">
-            {[70, 118, 166, 214, 262].map((py, ri) =>
-              [1360, 1408, 1456, 1504, 1552].map((px, ci) => (
-                <g key={`cplus-${ri}-${ci}`}>
-                  <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
-                  <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
-                </g>
-              ))
-            )}
-          </g>
-
-          {/* Bottom-Left Dot Grid */}
-          <g className="cards-dot-grid">
-            {cardsDotRows.map((dy, rIndex) =>
-              cardsDotCols.map((dx, cIndex) => {
-                const colRatio = (dx - 40) / (280 - 40);
-                const rowRatio = (dy - 720) / (940 - 720);
-                const op = Math.max(0.12, 0.68 - colRatio * 0.42 - (1 - rowRatio) * 0.3);
-                return (
-                  <circle key={`cdot-${rIndex}-${cIndex}`} className="svg-dot" cx={dx} cy={dy} r="1.3" opacity={op} />
-                );
-              })
-            )}
-          </g>
-
-          {/* Corner Crosshairs */}
-          <g className="crosshair-marker">
-            {/* Top-Left Main Crosshair */}
-            <line className="svg-ch" x1="45" y1="65" x2="77" y2="65" strokeWidth="1.2" />
-            <line className="svg-ch" x1="61" y1="49" x2="61" y2="81" strokeWidth="1.2" />
-
-            {/* Bottom-Right Main Crosshair */}
-            <line className="svg-ch" x1="1520" y1="935" x2="1552" y2="935" strokeWidth="1.2" />
-            <line className="svg-ch" x1="1536" y1="919" x2="1536" y2="951" strokeWidth="1.2" />
-
-            {/* Top-Right Sub Crosshair */}
-            <line className="svg-ch" x1="1310" y1="65" x2="1334" y2="65" strokeWidth="1.1" opacity="0.65" />
-            <line className="svg-ch" x1="1322" y1="53" x2="1322" y2="77" strokeWidth="1.1" opacity="0.65" />
-
-            {/* Bottom-Left Sub Crosshair */}
-            <line className="svg-ch" x1="300" y1="935" x2="324" y2="935" strokeWidth="1.1" opacity="0.65" />
-            <line className="svg-ch" x1="312" y1="923" x2="312" y2="947" strokeWidth="1.1" opacity="0.65" />
           </g>
         </svg>
 
-        {/* 3D Rotating Sphere / Orbital Structure */}
-        <div className="cards-geo-scene">
-          <div className="cards-geo-rig">
-            {/* Primary Outer Ring */}
-            <div className="cards-geo-ring cards-ring-outer" />
+        {/* ── Header ──────────────────────────────────────────── */}
+        <header className="site-header">
+          <div className="header-logo">
+            <span className="logo-text">
+              <span className="logo-stylized-a" aria-hidden="true">
+                <StylizedA />
+              </span>
+              <span className="sr-only">A</span>TC
+            </span>
+          </div>
 
-            {/* Orbital Meridian Rings */}
-            <div className="cards-geo-ring cards-ring-orbit-1" />
-            <div className="cards-geo-ring cards-ring-orbit-2" />
-            <div className="cards-geo-ring cards-ring-orbit-3" />
-            <div className="cards-geo-ring cards-ring-equator" />
+          {/* Desktop nav */}
+          <nav className="header-nav" aria-label="Main Navigation">
+            {NAV_ITEMS.map(({ label, hash }) => {
+              const isActive = activeHash === hash;
+              return (
+                <div key={hash} className={`nav-item${isActive ? ' active' : ''}`}>
+                  <a href={hash} onClick={() => handleNavClick(hash)}><BrandText>{label}</BrandText></a>
+                  {isActive ? <div className="nav-underline" /> : <div className="nav-hover-line" />}
+                </div>
+              );
+            })}
+            <button
+              className="theme-toggle"
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            >
+              <ThemeIcon theme={theme} />
+            </button>
+          </nav>
 
-            {/* Inner Concentric 3D Rig */}
-            <div className="cards-geo-inner-rig">
-              <div className="cards-geo-ring cards-ring-inner" />
-              <div className="cards-geo-ring cards-ring-inner-orbit" />
+          {/* Mobile controls: theme toggle + hamburger */}
+          <div className="mobile-controls">
+            <button
+              className="theme-toggle"
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            >
+              <ThemeIcon theme={theme} />
+            </button>
+            <button
+              className="hamburger"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              {/* Three bars → X morphing via CSS */}
+              <span className={`ham-bar ham-bar-1${menuOpen ? ' open' : ''}`} />
+              <span className={`ham-bar ham-bar-2${menuOpen ? ' open' : ''}`} />
+              <span className={`ham-bar ham-bar-3${menuOpen ? ' open' : ''}`} />
+            </button>
+          </div>
+        </header>
+
+        {/* ── Mobile nav drawer ───────────────────────────────── */}
+        <div
+          className={`mobile-nav-overlay${menuOpen ? ' open' : ''}`}
+          onClick={() => setMenuOpen(false)}
+          aria-hidden={!menuOpen}
+        />
+        <nav
+          className={`mobile-nav-drawer${menuOpen ? ' open' : ''}`}
+          aria-label="Mobile Navigation"
+        >
+          {NAV_ITEMS.map(({ label, hash }) => {
+            const isActive = activeHash === hash;
+            return (
+              <a
+                key={hash}
+                href={hash}
+                className={`mobile-nav-item${isActive ? ' active' : ''}`}
+                onClick={() => handleNavClick(hash)}
+              >
+                <BrandText>{label}</BrandText>
+              </a>
+            );
+          })}
+        </nav>
+
+        {/* ── Hero ────────────────────────────────────────────── */}
+        <main className="hero-content">
+          <div className="title-lockup">
+            <h1 className="main-title">
+              <span className="title-row title-row-1">
+                <span className="letter-stylized-a" aria-hidden="true">
+                  <StylizedA />
+                </span>
+                <span className="sr-only">A</span>
+                <span>L</span>
+                <span className="letter-stylized-a letter-stylized-a-second" aria-hidden="true">
+                  <StylizedA />
+                </span>
+                <span className="sr-only">A</span>
+                <span>N</span>
+              </span>
+              <span className="title-row title-row-2">TURING</span>
+            </h1>
+            <div className="title-sub">
+              <span>C</span>
+              <span>L</span>
+              <span>U</span>
+              <span>B</span>
+            </div>
+          </div>
+        </main>
+      </div>
+      <section className="blank-page" ref={cardsSectionRef} aria-label="Explore the Alan Turing Club">
+        {/* ── Cards Section Geometric Background ──────────────── */}
+        <div className="cards-geo-container" aria-hidden="true">
+          {/* Corner & Ambient Technical Geometry */}
+          <svg
+            className="cards-geo-backdrop"
+            viewBox="0 0 1600 1000"
+            preserveAspectRatio="xMidYMid slice"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* Static Full-Bleed Construction Lines */}
+            <line className="svg-line" x1="0" y1="500" x2="1600" y2="500" strokeWidth="1" opacity="0.4" />
+            <line className="svg-line" x1="800" y1="0" x2="800" y2="1000" strokeWidth="1" opacity="0.4" />
+
+            {/* Corner Framing Lines */}
+            <line className="svg-line" x1="50" y1="110" x2="420" y2="110" strokeWidth="1" opacity="0.35" />
+            <line className="svg-line" x1="50" y1="40" x2="50" y2="220" strokeWidth="1" opacity="0.35" />
+            <line className="svg-line" x1="1180" y1="890" x2="1550" y2="890" strokeWidth="1" opacity="0.35" />
+            <line className="svg-line" x1="1550" y1="780" x2="1550" y2="960" strokeWidth="1" opacity="0.35" />
+
+            {/* Sweeping Outer Corner Arcs to fill corners */}
+            <circle className="svg-circle cards-corner-arc-1" cx="160" cy="180" r="540" strokeWidth="1" opacity="0.3" />
+            <circle className="svg-circle cards-corner-arc-2" cx="1440" cy="820" r="580" strokeWidth="1" opacity="0.25" />
+
+            {/* Top-Right Plus Grid */}
+            <g className="cards-plus-grid" opacity="0.55">
+              {[70, 118, 166, 214, 262].map((py, ri) =>
+                [1360, 1408, 1456, 1504, 1552].map((px, ci) => (
+                  <g key={`cplus-${ri}-${ci}`}>
+                    <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
+                    <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
+                  </g>
+                ))
+              )}
+            </g>
+
+            {/* Bottom-Left Dot Grid */}
+            <g className="cards-dot-grid">
+              {cardsDotRows.map((dy, rIndex) =>
+                cardsDotCols.map((dx, cIndex) => {
+                  const colRatio = (dx - 40) / (280 - 40);
+                  const rowRatio = (dy - 720) / (940 - 720);
+                  const op = Math.max(0.12, 0.68 - colRatio * 0.42 - (1 - rowRatio) * 0.3);
+                  return (
+                    <circle key={`cdot-${rIndex}-${cIndex}`} className="svg-dot" cx={dx} cy={dy} r="1.3" opacity={op} />
+                  );
+                })
+              )}
+            </g>
+
+            {/* Corner Crosshairs */}
+            <g className="crosshair-marker">
+              {/* Top-Left Main Crosshair */}
+              <line className="svg-ch" x1="45" y1="65" x2="77" y2="65" strokeWidth="1.2" />
+              <line className="svg-ch" x1="61" y1="49" x2="61" y2="81" strokeWidth="1.2" />
+
+              {/* Bottom-Right Main Crosshair */}
+              <line className="svg-ch" x1="1520" y1="935" x2="1552" y2="935" strokeWidth="1.2" />
+              <line className="svg-ch" x1="1536" y1="919" x2="1536" y2="951" strokeWidth="1.2" />
+
+              {/* Top-Right Sub Crosshair */}
+              <line className="svg-ch" x1="1310" y1="65" x2="1334" y2="65" strokeWidth="1.1" opacity="0.65" />
+              <line className="svg-ch" x1="1322" y1="53" x2="1322" y2="77" strokeWidth="1.1" opacity="0.65" />
+
+              {/* Bottom-Left Sub Crosshair */}
+              <line className="svg-ch" x1="300" y1="935" x2="324" y2="935" strokeWidth="1.1" opacity="0.65" />
+              <line className="svg-ch" x1="312" y1="923" x2="312" y2="947" strokeWidth="1.1" opacity="0.65" />
+            </g>
+          </svg>
+
+          {/* 3D Rotating Sphere / Orbital Structure */}
+          <div className="cards-geo-scene">
+            <div className="cards-geo-rig">
+              {/* Primary Outer Ring */}
+              <div className="cards-geo-ring cards-ring-outer" />
+
+              {/* Orbital Meridian Rings */}
+              <div className="cards-geo-ring cards-ring-orbit-1" />
+              <div className="cards-geo-ring cards-ring-orbit-2" />
+              <div className="cards-geo-ring cards-ring-orbit-3" />
+              <div className="cards-geo-ring cards-ring-equator" />
+
+              {/* Inner Concentric 3D Rig */}
+              <div className="cards-geo-inner-rig">
+                <div className="cards-geo-ring cards-ring-inner" />
+                <div className="cards-geo-ring cards-ring-inner-orbit" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
       <div className="second-page-grid">
         {SECOND_PAGE_CARDS.map(({ title, artwork }) => (
@@ -549,7 +569,7 @@ export default function App() {
             onPointerLeave={resetCardTilt}
           >
             <CardArtwork kind={artwork} />
-            <h2>{title}</h2>
+            <h2><BrandText>{title}</BrandText></h2>
           </article>
         ))}
       </div>
