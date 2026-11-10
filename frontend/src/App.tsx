@@ -135,7 +135,7 @@ export default function App() {
   const dotRows: number[] = [];
   for (let y = 680; y <= 918; y += 15.2) dotRows.push(y);
 
-  // Cards section corner dot grid
+  // Cards section corner decorative grids
   const cardsDotCols: number[] = [];
   for (let x = 40; x <= 280; x += 18) cardsDotCols.push(x);
   const cardsDotRows: number[] = [];
@@ -282,7 +282,6 @@ export default function App() {
           <g className="geo-static-lines">
             <line className="svg-line geo-line-h" x1="0" y1="502" x2="1648" y2="502" strokeWidth="1" />
             <line className="svg-line geo-line-v" x1="1162" y1="60" x2="1162" y2="885" strokeWidth="1" />
-            <line className="svg-line geo-line-h-sub" x1="55" y1="850" x2="770" y2="850" strokeWidth="1" />
             <line className="svg-line geo-line-v-sub" x1="55" y1="10" x2="55" y2="180" strokeWidth="1" />
           </g>
 
@@ -471,7 +470,7 @@ export default function App() {
       <section className="blank-page" ref={cardsSectionRef} aria-label="Explore the Alan Turing Club">
         {/* ── Cards Section Geometric Background ──────────────── */}
         <div className="cards-geo-container" aria-hidden="true">
-          {/* Corner & Ambient Technical Geometry */}
+          {/* Corner Decorative Accents */}
           <svg
             className="cards-geo-backdrop"
             viewBox="0 0 1600 1000"
@@ -479,20 +478,6 @@ export default function App() {
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            {/* Static Full-Bleed Construction Lines */}
-            <line className="svg-line" x1="0" y1="500" x2="1600" y2="500" strokeWidth="1" opacity="0.4" />
-            <line className="svg-line" x1="800" y1="0" x2="800" y2="1000" strokeWidth="1" opacity="0.4" />
-
-            {/* Corner Framing Lines */}
-            <line className="svg-line" x1="50" y1="110" x2="420" y2="110" strokeWidth="1" opacity="0.35" />
-            <line className="svg-line" x1="50" y1="40" x2="50" y2="220" strokeWidth="1" opacity="0.35" />
-            <line className="svg-line" x1="1180" y1="890" x2="1550" y2="890" strokeWidth="1" opacity="0.35" />
-            <line className="svg-line" x1="1550" y1="780" x2="1550" y2="960" strokeWidth="1" opacity="0.35" />
-
-            {/* Sweeping Outer Corner Arcs to fill corners */}
-            <circle className="svg-circle cards-corner-arc-1" cx="160" cy="180" r="540" strokeWidth="1" opacity="0.3" />
-            <circle className="svg-circle cards-corner-arc-2" cx="1440" cy="820" r="580" strokeWidth="1" opacity="0.25" />
-
             {/* Top-Right Plus Grid */}
             <g className="cards-plus-grid" opacity="0.55">
               {[70, 118, 166, 214, 262].map((py, ri) =>
@@ -518,25 +503,6 @@ export default function App() {
                 })
               )}
             </g>
-
-            {/* Corner Crosshairs */}
-            <g className="crosshair-marker">
-              {/* Top-Left Main Crosshair */}
-              <line className="svg-ch" x1="45" y1="65" x2="77" y2="65" strokeWidth="1.2" />
-              <line className="svg-ch" x1="61" y1="49" x2="61" y2="81" strokeWidth="1.2" />
-
-              {/* Bottom-Right Main Crosshair */}
-              <line className="svg-ch" x1="1520" y1="935" x2="1552" y2="935" strokeWidth="1.2" />
-              <line className="svg-ch" x1="1536" y1="919" x2="1536" y2="951" strokeWidth="1.2" />
-
-              {/* Top-Right Sub Crosshair */}
-              <line className="svg-ch" x1="1310" y1="65" x2="1334" y2="65" strokeWidth="1.1" opacity="0.65" />
-              <line className="svg-ch" x1="1322" y1="53" x2="1322" y2="77" strokeWidth="1.1" opacity="0.65" />
-
-              {/* Bottom-Left Sub Crosshair */}
-              <line className="svg-ch" x1="300" y1="935" x2="324" y2="935" strokeWidth="1.1" opacity="0.65" />
-              <line className="svg-ch" x1="312" y1="923" x2="312" y2="947" strokeWidth="1.1" opacity="0.65" />
-            </g>
           </svg>
 
           {/* 3D Rotating Sphere / Orbital Structure */}
@@ -560,20 +526,20 @@ export default function App() {
           </div>
         </div>
 
-      <div className="second-page-grid">
-        {SECOND_PAGE_CARDS.map(({ title, artwork }) => (
-          <article
-            className="landing-card"
-            key={title}
-            onPointerMove={updateCardGlow}
-            onPointerLeave={resetCardTilt}
-          >
-            <CardArtwork kind={artwork} />
-            <h2><BrandText>{title}</BrandText></h2>
-          </article>
-        ))}
-      </div>
-    </section>
+        <div className="second-page-grid">
+          {SECOND_PAGE_CARDS.map(({ title, artwork }) => (
+            <article
+              className="landing-card"
+              key={title}
+              onPointerMove={updateCardGlow}
+              onPointerLeave={resetCardTilt}
+            >
+              <CardArtwork kind={artwork} />
+              <h2><BrandText>{title}</BrandText></h2>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
