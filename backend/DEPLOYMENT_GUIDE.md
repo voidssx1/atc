@@ -3,9 +3,9 @@
 This guide covers configuring Neon PostgreSQL, Cloudflare Hyperdrive, Cloudflare Secrets & Variables, Clerk webhooks, Resend/Brevo email delivery, Cloudflare Workers Rate Limiting / optional Zone WAF rules, Python Workers deployment (`pywrangler`), smoke testing, and rollback procedures for `atc-dsa-backend`.
 
 > **Current Verification Boundary (`Backend` branch)**:
-> - **Verified Locally**: Python compilation (`python -m compileall -q src scripts tests`), full SQLite + mocked-external-provider `pytest` suite (including RBAC across all 4 roles, draft self-approval/revision immutability, bounded duplicate-safe imports, Clerk/Svix mocks, Resend/Brevo mocks, and Hyperdrive engine reuse), plus Linux CI `pywrangler sync` & `wrangler deploy --dry-run`.
-> - **Verified Live (`https://atc-dsa-backend.webatc77.workers.dev`, Version `49f1ffb8-54bd-4998-a02a-e513e6dd1cf7`, commit `9c1d5f6`)**: Worker deployed with Hyperdrive + Neon (`003_clerk_auth_policies` applied, seeded `4` topics / `8` subtopics / `8` resources, `TECH_ADMIN` linked); `/health`, `/api/v1/openapi.json`, `/api/v1/docs`, `/api/v1/roadmap/topics`, `/api/v1/resources/`, `@bennett.edu.in` `STUDENT` signup + non-Bennett `403`, `/auth/refresh`, `30s` Clerk grace overlap, student profile/progress/bookmarks/dashboard, `VIEWER` & `CONTENT_ADMIN` RBAC, Draft v1->v2 revision & `409` immutability, Resource CRUD + `hard_delete`, live Clerk Dashboard signed webhooks (`user.deleted`, `user.updated`, `session.revoked` in Neon `webhook_events`) + `/webhooks/clerk` `400`/`401` guards, `RL_AUTH_EXCHANGE` & `RL_AUTH_REFRESH` `429 Retry-After: 60`, `cleanup-expired-sessions`, `process-clerk-outbox`, and `http://localhost:5173` CORS preflight all passed live. *(Redeploy via `Deploy ATC DSA Backend` for `5ee2e1a`+ adding shared SSLContext pooling, canonical resource URL dedupe, admin self-guards, analytics date bounds, and Resend `401`/`403`/`429` Brevo fallback.)*
-> - **Pending Manual / External Verification**: Resend/Brevo sender domain DNS verification for `noreply@bennett.edu.in` (DNS check shows `bennett.edu.in` uses Microsoft 365 `-all` SPF + `p=quarantine` DMARC with no `resend._domainkey.bennett.edu.in` / `send.bennett.edu.in` records, causing Resend `HTTP 403`), live Cloudflare Cron trigger execution across a `:00` UTC tick, and updating `ALLOWED_ORIGINS` / `CLERK_ALLOWED_ORIGINS` once the future frontend origin is ready.
+> - **Verified Locally & Linux Packaging**: Python compilation (`python -m compileall -q src scripts tests`), full SQLite + mocked-external-provider `pytest` suite (**`108 passed`**, including RBAC across all 4 roles, draft self-approval/revision immutability, bounded duplicate-safe imports, Clerk/Svix mocks, Resend/Brevo mocks, Hyperdrive engine reuse, lazy OpenAPI snapshot parity, and prefix-guarded routing), plus Linux CI `pywrangler sync` & `wrangler deploy --dry-run` (`43077148840`, `Total Upload: 29323.54 KiB / gzip: 7506.77 KiB`).
+> - **Verified Live (`https://atc-dsa-backend.webatc77.workers.dev`, Version `4232e353-deec-4aa0-8052-defae0bc499a`, commit `011bf25`)**: Worker deployed with Hyperdrive + Neon (`003_clerk_auth_policies` applied, seeded `4` topics / `8` subtopics / `8` resources, `TECH_ADMIN` linked); `43/43` live requests (cold bursts, 8-way simultaneous concurrency with `max_cpuMs=592`, `/health`, `/api/v1/openapi.json` `45–52ms` CPU, `/api/v1/docs`, `/api/v1/roadmap/topics`, `/api/v1/resources/`, `TECH_ADMIN` Clerk exchange/outbox/dashboard/logout, non-Bennett `403`, unauth `401`, `POST /admin/jobs/test-email` Resend `HTTP 403` -> Brevo `200`, `http://localhost:5173` CORS preflight) succeeded with **0 `503`/`1102`/`10021` errors**. Earlier on `d6c795b` (`94d36316`) & `9c1d5f6`, multi-role `STUDENT`/`VIEWER`/`CONTENT_ADMIN` RBAC + draft workflow, live Clerk Dashboard signed webhooks (`user.deleted`, `user.updated`, `session.revoked`), `RL_AUTH_EXCHANGE`/`RL_AUTH_REFRESH` `429 Retry-After: 60`, and the autonomous `18:00:00Z` hourly Cron (`cron="0 1-23 * * *"`, `outcome=ok`, `user_sessions` `7 -> 0`, `resources.last_checked_at` left `0/8`) all passed live.
+> - **Pending External / Operational Items**: Resend/Brevo sender domain DNS authentication & inbox receipt verification (`noreply@bennett.edu.in` fails Resend with `HTTP 403` and risks `p=quarantine` DMARC on Brevo relays; no inbox or ESP dashboard credentials available here), live midnight `00:00:00 UTC` daily resource availability Cron observation (`0 0 * * *`), and updating `ALLOWED_ORIGINS` / `CLERK_ALLOWED_ORIGINS` for the future frontend origin.
 
 ---
 
@@ -92,16 +92,30 @@ Verify revision reaches `003_clerk_auth_policies (head)`.
    npx wrangler secret put CLERK_WEBHOOK_SECRET
    ```
 
-### 3.2 Email Provider Verification (Resend & Brevo)
+### 3.2 Email Provider Verification (Resend & Brevo) & Required DNS Records
 
 - The backend calls **Resend** first (`https://api.resend.com/emails`) and falls back to **Brevo** (`https://api.brevo.com/v3/smtp/email`) on `5xx`, `401`/`403`/`429`, `ConnectTimeout`, and network errors (skipping Brevo fallback on Resend ambiguous `ReadTimeout` or `400`/`422` validation errors to prevent duplicate emails).
-- Before sending transactional/test emails, verify the sender domain/address matching `EMAILS_FROM_EMAIL` (`noreply@bennett.edu.in`) in Resend (SPF/DKIM DNS records) and Brevo, or update `EMAILS_FROM_EMAIL` in `wrangler.toml` to a verified sender domain (live `test-email` on `9c1d5f6` received Resend `HTTP 403` because `bennett.edu.in` is unverified in Resend).
+- **Observed DNS State (`bennett.edu.in`)**: Public DNS shows Microsoft 365 MX (`bennett-edu-in.mail.protection.outlook.com`), `selector1`/`selector2._domainkey.bennett.edu.in` (CNAMEs to `bennettu.onmicrosoft.com`), strict SPF (`v=spf1 ip4:15.252.252.72 include:spf.protection.outlook.com -all`), and `p=quarantine` DMARC (`v=DMARC1; p=quarantine; rua=mailto:BUDNS.DMARC@bennett.edu.in; ruf=mailto:BUDNS.DMARC@bennett.edu.in`). Candidate subdomains (`mail`, `send`, `noreply`, `email`, `notifications`, `atc`) and Resend/Brevo DKIM selectors (`resend._domainkey`, `mail._domainkey`, `brevo1._domainkey`, `brevo2._domainkey`, `dkim._domainkey`) currently return `[]`.
+- **Required DNS Records for Authorized Sender Authentication** *(or point `EMAILS_FROM_EMAIL` in `wrangler.toml` to a verified team-controlled domain)*:
+  1. **Resend**: Add the sender domain (e.g. `bennett.edu.in` or subdomain `mail.bennett.edu.in`) in Resend Dashboard and publish:
+     - `TXT` `resend._domainkey.<domain>` -> DKIM public key generated by Resend
+     - `MX` `send.<domain>` -> Resend feedback/bounce MX target from dashboard (priority `10`)
+     - `TXT` `send.<domain>` -> `v=spf1 include:amazonses.com ~all`
+     - Optional DMARC on dedicated subdomain (`_dmarc.mail.bennett.edu.in`) if using subdomain isolation
+  2. **Brevo**: Add and authenticate the same sender domain/subdomain in Brevo Senders & Domains and publish:
+     - Brevo DKIM `TXT` / `CNAME` selector records (`mail._domainkey.<domain>`, `brevo1._domainkey.<domain>`, `brevo2._domainkey.<domain>` as issued by Brevo)
+     - Include `include:spf.brevo.com` in the sending domain's SPF `TXT` record before `-all` / `~all` so DMARC alignment passes.
 - Upload API keys without printing them:
   ```powershell
   npx wrangler secret put RESEND_API_KEY
   npx wrangler secret put BREVO_API_KEY
   ```
-- Test delivery as a `tech_admin` using `POST /api/v1/admin/jobs/test-email` after deployment.
+- Test delivery as a `tech_admin` using `POST /api/v1/admin/jobs/test-email` after DNS propagation and inspect raw `Authentication-Results` (`SPF=pass`, `DKIM=pass`, `DMARC=pass`) in the recipient mailbox.
+
+### 3.3 Cold-Isolate Runtime Notes (Pyodide Timezone Warning & Cold DB Latency)
+
+- **Observed Cold DB Latency (`011bf25`)**: First-ever DB-backed requests on a fresh Worker isolate incur cold PostgreSQL dialect/connection initialization (`~449–1182 ms` CPU on `/roadmap/topics`, `/resources/`, and `/auth/clerk/exchange`, vs `13–131 ms` CPU warm and `45–52 ms` CPU on `/api/v1/openapi.json` via `_openapi_snapshot.py`).
+- **Non-Fatal Timezone Log**: Neon direct reports `parameter_status(b"TimeZone") == b"GMT"`, and Cloudflare Python Workers (Pyodide WASM) lacks OS `tzdata`, causing `psycopg` to emit `"unknown PostgreSQL timezone: 'UTC'; will use UTC"` once per cold DB isolate while caching `timezone.utc` for all subsequent requests on that isolate. This warning is non-fatal (no errors or corrupted timestamps) and does not justify risky PgBouncer `-c timezone` startup hacks.
 
 ---
 
