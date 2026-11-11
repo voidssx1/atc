@@ -12,11 +12,11 @@ from app.api.deps import (
 )
 from app.core.config import get_settings
 from app.core.security import (
-    _HAS_WEB_CRYPTO,
     generate_random_token,
     generate_session_token,
     hash_password,
     hash_session_token,
+    has_web_crypto,
     is_allowed_student_email,
     is_legacy_bcrypt_hash,
     verify_password,
@@ -603,7 +603,7 @@ async def login(
         )
 
     if user and is_legacy_bcrypt_hash(user.hashed_password):
-        if get_settings().ENVIRONMENT.lower() == "production" or _HAS_WEB_CRYPTO:
+        if get_settings().ENVIRONMENT.lower() == "production" or has_web_crypto():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(

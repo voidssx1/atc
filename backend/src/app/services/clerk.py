@@ -13,21 +13,11 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.webcrypto import call_subtle, get_js_ffi, has_web_crypto
 from app.models.analytics import AuditLog
 from app.models.clerk import ClerkOutbox
 
 logger = logging.getLogger("clerk_service")
-
-# Detect Cloudflare Python Workers / Pyodide Web Crypto runtime
-try:
-    import js
-    from pyodide.ffi import to_js
-
-    _HAS_WEB_CRYPTO = hasattr(js, "crypto") and hasattr(js.crypto, "subtle")
-except (ImportError, AttributeError):
-    js = None
-    to_js = None
-    _HAS_WEB_CRYPTO = False
 
 # Optional CPython fallback for RS256 verification in local tests/CLI
 try:
@@ -161,24 +151,33 @@ async def _resolve_jwk(kid: str) -> Dict[str, Any]:
 
 
 async def _verify_rs256_webcrypto(jwk: Dict[str, Any], signing_input: bytes, signature: bytes) -> bool:
-    jwk_js = to_js(jwk, dict_converter=js.Object.fromEntries)
-    algo = js.Object.new()
+    js_mod, to_js_fn = get_js_ffi()
+    if js_mod is None or to_js_fn is None:
+        raise RuntimeError("Pyodide JS runtime is unavailable")
+
+    global_obj = getattr(js_mod, "globalThis", js_mod)
+    object_ctor = getattr(js_mod, "Object", None) or getattr(global_obj, "Object")
+
+    jwk_js = to_js_fn(jwk, dict_converter=object_ctor.fromEntries)
+    algo = object_ctor.new()
     algo.name = "RSASSA-PKCS1-v1_5"
     algo.hash = "SHA-256"
 
-    crypto_key = await js.crypto.subtle.importKey(
+    crypto_key = await call_subtle(
+        "importKey",
         "jwk",
         jwk_js,
         algo,
         False,
-        to_js(["verify"]),
+        to_js_fn(["verify"]),
     )
     return bool(
-        await js.crypto.subtle.verify(
+        await call_subtle(
+            "verify",
             "RSASSA-PKCS1-v1_5",
             crypto_key,
-            to_js(signature),
-            to_js(signing_input),
+            to_js_fn(signature),
+            to_js_fn(signing_input),
         )
     )
 
@@ -251,7 +250,7 @@ async def verify_clerk_jwt(token: str) -> Dict[str, Any]:
     signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
 
     # 3. Verify RS256 cryptographic signature
-    if _HAS_WEB_CRYPTO:
+    if has_web_crypto():
         valid_sig = await _verify_rs256_webcrypto(jwk, signing_input, signature)
     else:
         valid_sig = _verify_rs256_cpython(jwk, signing_input, signature)

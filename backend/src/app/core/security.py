@@ -6,19 +6,9 @@ import secrets
 from typing import Optional
 
 from app.core.config import get_settings
+from app.core.webcrypto import call_subtle, get_js_ffi, has_web_crypto
 
 logger = logging.getLogger("security")
-
-# Detect Pyodide / Cloudflare Python Workers JavaScript environment
-try:
-    import js
-    from pyodide.ffi import to_js
-
-    _HAS_WEB_CRYPTO = hasattr(js, "crypto") and hasattr(js.crypto, "subtle")
-except (ImportError, AttributeError):
-    js = None
-    to_js = None
-    _HAS_WEB_CRYPTO = False
 
 # Detect bcrypt for optional legacy verification in non-production environments
 try:
@@ -39,31 +29,41 @@ def is_legacy_bcrypt_hash(hashed_password: Optional[str]) -> bool:
 
 async def _derive_pbkdf2_webcrypto(password: str, salt: bytes, iterations: int) -> bytes:
     """Derive 256 bits (32 bytes) using Cloudflare Worker native Web Crypto API."""
-    pw_bytes = password.encode("utf-8")
-    pw_js = to_js(pw_bytes)
-    salt_js = to_js(salt)
+    js_mod, to_js_fn = get_js_ffi()
+    if js_mod is None or to_js_fn is None:
+        raise RuntimeError("Pyodide JS runtime is unavailable")
 
-    # In Pyodide, constructing a JS Object directly ensures proper property lookup by Web Crypto
-    algo = js.Object.new()
+    global_obj = getattr(js_mod, "globalThis", js_mod)
+    object_ctor = getattr(js_mod, "Object", None) or getattr(global_obj, "Object")
+    uint8_ctor = getattr(js_mod, "Uint8Array", None) or getattr(global_obj, "Uint8Array")
+
+    pw_bytes = password.encode("utf-8")
+    pw_js = to_js_fn(pw_bytes)
+    salt_js = to_js_fn(salt)
+
+    # Construct JS algorithm object directly so Web Crypto reads properties cleanly
+    algo = object_ctor.new()
     algo.name = "PBKDF2"
     algo.salt = salt_js
     algo.iterations = iterations
     algo.hash = "SHA-256"
 
-    key = await js.crypto.subtle.importKey(
+    key = await call_subtle(
+        "importKey",
         "raw",
         pw_js,
         "PBKDF2",
         False,
-        to_js(["deriveBits"]),
+        to_js_fn(["deriveBits"]),
     )
 
-    derived_bits = await js.crypto.subtle.deriveBits(
+    derived_bits = await call_subtle(
+        "deriveBits",
         algo,
         key,
         256,  # 256 bits = 32 bytes
     )
-    return bytes(js.Uint8Array.new(derived_bits))
+    return bytes(uint8_ctor.new(derived_bits))
 
 
 def _derive_pbkdf2_cpython(password: str, salt: bytes, iterations: int) -> bytes:
@@ -84,7 +84,7 @@ async def derive_pbkdf2_key(password: str, salt: bytes, iterations: int) -> byte
     Uses Cloudflare Web Crypto in Workers runtime; falls back to CPython hashlib
     in local development, tests, or when Web Crypto is unavailable.
     """
-    if _HAS_WEB_CRYPTO:
+    if has_web_crypto():
         try:
             return await _derive_pbkdf2_webcrypto(password, salt, iterations)
         except Exception as e:
@@ -162,7 +162,7 @@ async def verify_password(plain_password: str, hashed_password: str) -> bool:
 
         if is_legacy_bcrypt_hash(hashed_password):
             # In production / Workers, reject expensive bcrypt execution to protect CPU quota
-            if get_settings().ENVIRONMENT.lower() == "production" or _HAS_WEB_CRYPTO:
+            if get_settings().ENVIRONMENT.lower() == "production" or has_web_crypto():
                 logger.warning("Legacy bcrypt hash encountered in production; suppression applied.")
                 return False
 
