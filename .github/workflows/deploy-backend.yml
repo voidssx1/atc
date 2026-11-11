@@ -1,0 +1,78 @@
+name: Deploy ATC DSA Backend
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: Package & Deploy Python Worker (Backend Only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify manual trigger branch is Backend
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "Backend" ]; then
+            echo "::error::This workflow must only be run from the Backend branch (got '${GITHUB_REF_NAME}')."
+            exit 1
+          fi
+          echo "Verified GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+
+      - name: Checkout Backend branch
+        uses: actions/checkout@v4
+        with:
+          ref: Backend
+
+      - name: Verify checked-out git branch and commit
+        run: |
+          BRANCH=$(git branch --show-current)
+          if [ "$BRANCH" != "Backend" ]; then
+            echo "::error::Expected checked-out branch 'Backend', got '$BRANCH'."
+            exit 1
+          fi
+          echo "Verified git branch=$BRANCH commit=$(git rev-parse --short HEAD)"
+
+      - name: Verify required Cloudflare deployment secrets are set
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::Both CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets must be configured."
+            exit 1
+          fi
+          echo "Required Cloudflare secrets are present (values redacted)."
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install uv (>= 0.13.4)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Verify toolchain versions
+        run: |
+          python --version
+          node -v
+          uv --version
+          python -c "import subprocess, re; out = subprocess.check_output(['uv', '--version'], text=True); m = re.search(r'(\d+\.\d+\.\d+)', out); ver = tuple(int(x) for x in m.group(1).split('.')); assert ver >= (0, 13, 4), f'uv >= 0.13.4 required, got {out}'; print('uv version OK:', m.group(1))"
+
+      - name: Sync Pyodide runtime dependencies inside backend
+        working-directory: backend
+        run: |
+          uvx --from workers-py pywrangler sync
+
+      - name: Deploy Worker via PyWrangler inside backend
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          uvx --from workers-py pywrangler deploy
