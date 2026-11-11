@@ -104,21 +104,21 @@ def obtain_clerk_session_jwt(
         if not dev_browser_jwt:
             raise RuntimeError("Clerk dev_browser response missing token field")
 
-        # 3. Consume sign_in_token through Clerk FAPI with Origin header so `azp` matches
+        # 3. Consume sign_in_token through Clerk FAPI using strategy="ticket" + Origin so `azp` matches
         r_sign_in = http.post(
             f"{clerk_fapi.rstrip('/')}/v1/client/sign_ins",
             params={"__clerk_db_jwt": dev_browser_jwt},
             headers={
                 "Origin": origin,
-                "Content-Type": "application/json",
                 "User-Agent": "atc-backend-verifier",
             },
-            json={"strategy": "sign_in_token", "token": sign_in_token},
+            data={"strategy": "ticket", "ticket": sign_in_token},
         )
         if r_sign_in.status_code != 200:
             raise RuntimeError(f"Clerk client sign_in failed with HTTP {r_sign_in.status_code}")
 
-        sid, jwt_token = _extract_jwt_from_sign_in_payload(r_sign_in.json())
+        sign_in_data = r_sign_in.json()
+        sid, jwt_token = _extract_jwt_from_sign_in_payload(sign_in_data)
 
         # 4. Mint session JWT explicitly if not embedded in last_active_token
         if not jwt_token:

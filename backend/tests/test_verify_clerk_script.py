@@ -43,6 +43,9 @@ def test_backend_only_clerk_verification_flow_redacts_secrets(capsys):
         if request.url.path == "/v1/client/sign_ins":
             assert request.headers["Origin"] == DEFAULT_ORIGIN
             assert request.url.params["__clerk_db_jwt"] == "dev_browser_jwt_secret"
+            body_text = request.content.decode("utf-8")
+            assert "strategy=ticket" in body_text
+            assert "ticket=st_one_time_token" in body_text
             return httpx.Response(
                 200,
                 json={
