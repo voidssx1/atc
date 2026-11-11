@@ -430,22 +430,22 @@ Creates a top-level roadmap topic.
 - **Errors**: `400` (duplicate slug), `401`, `403`, `422`.
 
 #### 26. `PUT /api/v1/roadmap/topics/{topic_id}`
-Updates an existing topic.
+Updates an **unpublished** (`is_published=false`) topic. Published topics are immutable (`409 Conflict`) and must be modified via `ContentDraft` approval.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `topic_id` (`uuid`)
 - **Request Body** (`RoadmapTopicUpdate`, all fields optional)
 - **Response `200 OK`**: `RoadmapTopicSummaryResponse`
-- **Errors**: `400` (duplicate slug), `401`, `403`, `404`, `422`.
+- **Errors**: `400` (duplicate slug), `401`, `403`, `404`, `409` (topic is already published), `422`.
 
 #### 27. `DELETE /api/v1/roadmap/topics/{topic_id}`
-Deletes a topic (cascades subtopics, resources under subtopics, and student progress).
+Deletes an **unpublished** (`is_published=false`) topic (cascades subtopics, resources under subtopics, and student progress). Published topics return `409 Conflict` until unpublished through an approved draft.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `topic_id` (`uuid`)
 - **Response `200 OK`**: `{"message": "Topic deleted successfully", "id": "<uuid>"}`
-- **Errors**: `401`, `403`, `404`, `422`.
+- **Errors**: `401`, `403`, `404`, `409` (topic is published), `422`.
 
 #### 28. `POST /api/v1/roadmap/subtopics`
-Creates a subtopic under `topic_id` (and optionally nests under `parent_subtopic_id`).
+Creates a subtopic under `topic_id` (and optionally nests under `parent_subtopic_id` within the same topic).
 - **Auth**: `tech_admin`, `content_admin`
 - **Request Body** (`RoadmapSubtopicCreate`):
 ```json
@@ -461,22 +461,22 @@ Creates a subtopic under `topic_id` (and optionally nests under `parent_subtopic
 }
 ```
 - **Response `201 Created`**: `RoadmapSubtopicResponse`
-- **Errors**: `401`, `403`, `404` (parent topic or subtopic not found), `422`.
+- **Errors**: `400` (parent belongs to different topic), `401`, `403`, `404` (parent topic or subtopic not found), `422`.
 
 #### 29. `PUT /api/v1/roadmap/subtopics/{subtopic_id}`
-Updates a subtopic.
+Updates an **unpublished** (`is_published=false`) subtopic and checks parent hierarchy integrity/cycles. Published subtopics return `409 Conflict`.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `subtopic_id` (`uuid`)
 - **Request Body** (`RoadmapSubtopicUpdate`)
 - **Response `200 OK`**: `RoadmapSubtopicResponse`
-- **Errors**: `401`, `403`, `404`, `422`.
+- **Errors**: `400` (cross-topic parent or cycle), `401`, `403`, `404`, `409` (subtopic is published), `422`.
 
 #### 30. `DELETE /api/v1/roadmap/subtopics/{subtopic_id}`
-Deletes a subtopic (cascades child subtopics, linked resources, and progress).
+Deletes an **unpublished** (`is_published=false`) subtopic (cascades child subtopics, linked resources, and progress). Published subtopics return `409 Conflict`.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `subtopic_id` (`uuid`)
 - **Response `200 OK`**: `{"message": "Subtopic deleted successfully", "id": "<uuid>"}`
-- **Errors**: `401`, `403`, `404`, `422`.
+- **Errors**: `401`, `403`, `404`, `409` (subtopic is published), `422`.
 
 #### 31. `POST /api/v1/roadmap/reorder`
 Bulk updates `order_index` values for `"topic"`, `"subtopic"`, or `"resource"` entities.
@@ -538,24 +538,24 @@ Creates a resource with HTTP/HTTPS URL validation.
 - **Errors**: `400` (invalid URL scheme/format), `401`, `403`, `404` (`subtopic_id` not found), `422`.
 
 #### 35. `PUT /api/v1/resources/{resource_id}`
-Updates an existing resource's metadata, URL, availability status, or archive flag.
+Updates an **archived** (`is_archived=true`) resource's metadata/URL, or soft-archives an active resource via `{"is_archived": true}`. Direct edits to active published resources return `409 Conflict` and must go through `ContentDraft` review.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `resource_id` (`uuid`)
 - **Request Body** (`ResourceUpdate`)
 - **Response `200 OK`**: `ResourceResponse`
-- **Errors**: `400` (invalid URL), `401`, `403`, `404`, `422`.
+- **Errors**: `400` (invalid URL), `401`, `403`, `404`, `409` (active published resource is immutable), `422`.
 
 #### 36. `DELETE /api/v1/resources/{resource_id}`
-Archives (`is_archived=true`) a resource by default, or permanently deletes it when `hard_delete=true`.
-- **Auth**: `tech_admin`, `content_admin`
+Soft-archives (`is_archived=true`) a resource by default (`tech_admin` or `content_admin`). Permanent deletion (`hard_delete=true`) requires `tech_admin` and requires the resource to already be archived (`is_archived=true`).
+- **Auth**: `tech_admin`, `content_admin` (`hard_delete=true`: `tech_admin` only)
 - **Path Param**: `resource_id` (`uuid`)
 - **Query Param**: `hard_delete` (`boolean`, default `false`)
 - **Response `200 OK`**:
 ```json
-{"message": "Resource archived successfully", "id": "33333333-3333-4333-8333-333333333333"}
+{"message": "Resource resource_archived successfully", "id": "33333333-3333-4333-8333-333333333333"}
 ```
-  (Or `"Resource deleted successfully"` when `hard_delete=true`.)
-- **Errors**: `401`, `403`, `404`, `422`.
+  (Or `"Resource resource_deleted successfully"` when `hard_delete=true`.)
+- **Errors**: `401`, `403`, `404`, `409` (`hard_delete=true` attempted on active non-archived resource), `422`.
 
 #### 37. `POST /api/v1/resources/{resource_id}/check-availability`
 Runs an immediate live HTTP check (`HEAD` with `GET` fallback) on the resource URL and updates `availability_status`, `status_code`, and `last_checked_at`.
@@ -576,13 +576,13 @@ Runs an immediate live HTTP check (`HEAD` with `GET` fallback) on the resource U
 #### 38. `POST /api/v1/resources/check-all-availability`
 Scans up to `limit` non-archived resources in sequence and updates their availability fields.
 - **Auth**: `tech_admin`, `content_admin`
-- **Query Param**: `limit` (`integer`, default `50`)
+- **Query Param**: `limit` (`integer 1..50`, default `50`)
 - **Response `200 OK`**:
 ```json
 {
   "message": "Availability scan completed",
   "summary": {
-    "checked": 10,
+    "total_checked": 10,
     "available": 9,
     "degraded": 0,
     "broken": 1
@@ -595,12 +595,14 @@ Scans up to `limit` non-archived resources in sequence and updates their availab
 
 ### 3.8 Content Drafts & Review Workflow (`10` Operations)
 
-State transitions: `draft` -> (`submit`) -> `pending_approval` -> (`approve` / `reject` by `tech_admin`) -> `approved` -> (`publish` by `tech_admin`) -> `published`. Drafts can be soft-archived (`is_archived=true`) and restored. Editing (`PUT`) or submitting (`submit`) is blocked once `published` or `archived`.
+State transitions: `draft` / `rejected` -> (`submit`) -> `pending_approval` -> (`approve` / `reject` by an independent `tech_admin`) -> `approved` -> (`publish` by an independent `tech_admin`) -> `published`.
+- **Separation of Duties**: A draft's `submitted_by_id` creator cannot `approve`, `reject`, or `publish` their own draft (`403 Forbidden`).
+- **Immutability & Revisions**: Once `published`, drafts become immutable revision records (`PUT`, `submit`, `approve`, `reject`, `archive`, and `restore` return `400`), and subsequent revisions for the same `entity_id` increment `version_number` and log `previous_snapshot` + `published_snapshot` in `audit_logs`.
 
 #### 39. `GET /api/v1/drafts/`
-Lists content drafts filtered by status, entity type, and archive state.
+Lists content drafts or published revision history filtered by status, entity type, `entity_id`, and archive state (ordered by `version_number DESC, updated_at DESC`).
 - **Auth**: `tech_admin`, `content_admin`, `viewer`
-- **Query Params**: `status` (`DraftStatus | null`), `entity_type` (`EntityType | null`), `include_archived` (`boolean`, default `false`), `skip` (`0`), `limit` (`50`, max `100`).
+- **Query Params**: `status` (`DraftStatus | null`), `entity_type` (`EntityType | null`), `entity_id` (`uuid | null`), `include_archived` (`boolean`, default `false`), `skip` (`0`), `limit` (`50`, max `100`).
 - **Response `200 OK`**: `ContentDraftResponse[]`
 - **Errors**: `401`, `403`, `422`.
 
@@ -649,41 +651,41 @@ Submits a draft for `tech_admin` approval (`status` becomes `"pending_approval"`
 - **Errors**: `400` (cannot re-submit `published`, `archived`, or non-submittable drafts), `401`, `403`, `404`, `422`.
 
 #### 44. `POST /api/v1/drafts/{draft_id}/approve`
-Approves a `pending_approval` draft (`status="approved"`).
-- **Auth**: `tech_admin` only
+Approves a `pending_approval` draft (`status="approved"`). Fails with `403` if caller is the draft's `submitted_by_id` creator.
+- **Auth**: `tech_admin` only (must differ from `submitted_by_id`)
 - **Path Param**: `draft_id` (`uuid`)
 - **Request Body** (`ContentDraftReview | null`, optional): `{"feedback": "Looks accurate."}`
 - **Response `200 OK`**: `ContentDraftResponse`
-- **Errors**: `400` (not in `pending_approval` / valid reviewable state), `401`, `403`, `404`, `422`.
+- **Errors**: `400` (not in `pending_approval`), `401`, `403` (non-`tech_admin` or self-approval attempt), `404`, `422`.
 
 #### 45. `POST /api/v1/drafts/{draft_id}/reject`
-Rejects a submitted draft with feedback (`status="rejected"`).
-- **Auth**: `tech_admin` only
+Rejects a `pending_approval` draft with feedback (`status="rejected"`). Fails with `403` if caller is `submitted_by_id`.
+- **Auth**: `tech_admin` only (must differ from `submitted_by_id`)
 - **Path Param**: `draft_id` (`uuid`)
 - **Request Body** (`ContentDraftReview`): `{"feedback": "Please fix broken URL."}`
 - **Response `200 OK`**: `ContentDraftResponse`
-- **Errors**: `400`, `401`, `403`, `404`, `422`.
+- **Errors**: `400` (not in `pending_approval`), `401`, `403` (non-`tech_admin` or self-rejection attempt), `404`, `422`.
 
 #### 46. `POST /api/v1/drafts/{draft_id}/publish`
-Publishes an `approved` draft into the live `roadmap_topics`, `roadmap_subtopics`, or `resources` table (validating resource URLs and explicit allowed fields; sets `draft.status="published"` and links `entity_id`).
-- **Auth**: `tech_admin` only
+Publishes an `approved` draft into `roadmap_topics`, `roadmap_subtopics`, or `resources` (validating resource URLs, subtopic parent hierarchy/cycles, and explicit allowed fields; sets `draft.status="published"`, advances sequential `version_number` for `entity_id`, and logs `previous_snapshot` + `published_snapshot` to `audit_logs`). Fails with `403` if caller is `submitted_by_id`.
+- **Auth**: `tech_admin` only (must differ from `submitted_by_id`)
 - **Path Param**: `draft_id` (`uuid`)
 - **Response `200 OK`**: `ContentDraftResponse`
-- **Errors**: `400` (draft not approved or invalid resource URL/UUID/type in payload), `401`, `403`, `404` (referenced entity missing), `422`.
+- **Errors**: `400` (draft not approved or invalid payload/cycle), `401`, `403`, `404` (referenced entity missing), `422`.
 
 #### 47. `POST /api/v1/drafts/{draft_id}/archive`
-Soft-archives a draft (`is_archived=true`, `status="archived"`).
+Soft-archives an unpublished draft (`is_archived=true`, `status="archived"`). Fails with `400` for `published` or already archived drafts.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `draft_id` (`uuid`)
 - **Response `200 OK`**: `ContentDraftResponse`
-- **Errors**: `401`, `403`, `404`, `422`.
+- **Errors**: `400`, `401`, `403`, `404`, `422`.
 
 #### 48. `POST /api/v1/drafts/{draft_id}/restore`
-Restores an archived draft back to `status="draft"` (`is_archived=false`).
+Restores an archived draft back to `status="draft"` (`is_archived=false`). Fails with `400` for `published` or non-archived drafts.
 - **Auth**: `tech_admin`, `content_admin`
 - **Path Param**: `draft_id` (`uuid`)
 - **Response `200 OK`**: `ContentDraftResponse`
-- **Errors**: `401`, `403`, `404`, `422`.
+- **Errors**: `400`, `401`, `403`, `404`, `422`.
 
 ---
 
@@ -836,8 +838,8 @@ All 6 endpoints require **`tech_admin`** only. In production, Cloudflare Cron Tr
 
 #### 62. `POST /api/v1/admin/jobs/run-availability-scan`
 - **Auth**: `tech_admin`
-- **Query Param**: `limit` (`integer`, default `50`)
-- **Response `200 OK`**: `{"message": "Resource availability scan executed", "results": {"checked": ..., "available": ..., "degraded": ..., "broken": ...}}`
+- **Query Param**: `limit` (`integer 1..50`, default `50`)
+- **Response `200 OK`**: `{"message": "Resource availability scan executed", "results": {"total_checked": ..., "available": ..., "degraded": ..., "broken": ...}}`
 - **Errors**: `401`, `403`, `422`.
 
 #### 63. `POST /api/v1/admin/jobs/cleanup-expired-sessions`
@@ -898,29 +900,29 @@ Exports roadmap structure as a downloadable `text/csv` attachment (`Content-Disp
 - **Errors**: `401`, `403`.
 
 #### 70. `POST /api/v1/admin/data/import/roadmap/json`
-Bulk imports topics and nested subtopics (preserving `parent_subtopic_id` hierarchy).
+Bounded, duplicate-safe bulk import for topics and nested subtopics (max `512 KiB`, `50` topics, `250` subtopics; skips existing slugs cleanly and rejects parent cycles).
 - **Auth**: `tech_admin` only
 - **Request Body**: `array<object>` (roadmap topic list matching export shape)
-- **Response `200 OK`**: `{"message": "Roadmap imported successfully", "imported_topics": 5}`
-- **Errors**: `400` (invalid topic/subtopic data or slug/parent integrity failure), `401`, `403`, `422`.
+- **Response `200 OK`**: `{"message": "Roadmap imported successfully", "imported_topics": 4, "skipped_topics": 0, "imported_subtopics": 8, "skipped_subtopics": 0, "rejected_count": 0}`
+- **Errors**: `400` (payload exceeds size/row bounds, invalid topic/subtopic data, cycle, or parent integrity failure), `401`, `403`, `422`.
 
 #### 71. `GET /api/v1/admin/data/export/resources/csv`
-Exports all resources as a downloadable `text/csv` attachment (`Content-Disposition: attachment; filename="resources_export.csv"`).
+Exports up to `1000` non-archived resources as a downloadable `text/csv` attachment (`Content-Disposition: attachment; filename=resources.csv`).
 - **Auth**: `tech_admin`, `content_admin`, `viewer`
 - **Response `200 OK`**: `text/csv` stream
 - **Errors**: `401`, `403`.
 
 #### 72. `POST /api/v1/admin/data/import/resources/csv`
-Bulk imports resources from CSV text, rejecting invalid HTTP/HTTPS URLs and invalid subtopic UUIDs.
+Bounded, duplicate-safe CSV bulk import for resources (max `512 KiB`, `500` rows; skips duplicate canonical HTTP/HTTPS URLs cleanly and rejects invalid URLs or invalid `subtopic_id` UUIDs).
 - **Auth**: `tech_admin` only
 - **Request Body** (`ImportCSVRequest`):
 ```json
 {
-  "csv_content": "title,url,resource_type,difficulty,subtopic_id,order_index\nBinary Search Guide,https://cp-algorithms.com/num_methods/binary_search.html,article,easy,,0"
+  "csv_content": "title,url,resource_type,difficulty,subtopic_id\nBinary Search Guide,https://cp-algorithms.com/num_methods/binary_search.html,article,easy,"
 }
 ```
-- **Response `200 OK`**: `{"message": "Resources imported successfully", "imported_count": 1}`
-- **Errors**: `400` (malformed CSV, invalid URL, invalid `subtopic_id` UUID, or missing subtopic), `401`, `403`, `422`.
+- **Response `200 OK`**: `{"message": "Resources imported successfully", "imported_count": 1, "skipped_count": 0, "rejected_count": 0}`
+- **Errors**: `400` (payload exceeds size/row bounds, malformed CSV, invalid URL, invalid `subtopic_id` UUID, or missing subtopic), `401`, `403`, `422`.
 
 ---
 

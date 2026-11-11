@@ -4,9 +4,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import ADMIN_ROLES, get_current_user, get_db
 from app.models.progress import ProgressStatus, StudentProgress
-from app.models.roadmap import RoadmapSubtopic
+from app.models.roadmap import RoadmapSubtopic, RoadmapTopic
 from app.models.user import User
 from app.schemas.progress import ProgressResponse, ProgressUpdateRequest
 
@@ -56,10 +56,14 @@ def update_subtopic_progress(
 ):
     sub = (
         db.query(RoadmapSubtopic)
+        .join(RoadmapTopic, RoadmapSubtopic.topic_id == RoadmapTopic.id)
         .filter(RoadmapSubtopic.id == subtopic_id)
         .first()
     )
-    if not sub:
+    if not sub or (
+        current_user.role not in ADMIN_ROLES
+        and (not sub.is_published or (sub.topic and not sub.topic.is_published))
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Subtopic not found"
         )

@@ -500,7 +500,7 @@ def test_drafts_detail_update_reject_archive_and_restore(
     assert arch.json()["is_archived"] is True
     assert arch.json()["status"] == "archived"
 
-    # Editing or rejecting an archived draft fails cleanly with 400
+    # Editing an archived draft fails cleanly with 400
     assert (
         client.put(
             f"/api/v1/drafts/{draft_id}",
@@ -540,7 +540,7 @@ def test_drafts_detail_update_reject_archive_and_restore(
 
 
 def test_resources_put_delete_and_availability_checks(
-    client, db_session, student_headers, monkeypatch
+    client, db_session, student_headers, tech_admin_headers, monkeypatch
 ):
     _, content_admin_headers = _create_role_headers(
         db_session,
@@ -569,7 +569,7 @@ def test_resources_put_delete_and_availability_checks(
     res_id = res_obj["id"]
     missing_id = uuid.uuid4()
 
-    # PUT /resources/{id}
+    # PUT /resources/{id} enforces immutability on active published resources
     assert client.put(f"/api/v1/resources/{res_id}", json={"title": "x"}).status_code == 401
     assert (
         client.put(
@@ -590,18 +590,11 @@ def test_resources_put_delete_and_availability_checks(
     assert (
         client.put(
             f"/api/v1/resources/{res_id}",
-            json={"url": "invalid-url"},
+            json={"title": "Bypass Direct Edit"},
             headers=content_admin_headers,
         ).status_code
-        == 400
+        == 409
     )
-    upd = client.put(
-        f"/api/v1/resources/{res_id}",
-        json={"title": "Updated Resource", "url": "https://example.com/updated"},
-        headers=content_admin_headers,
-    )
-    assert upd.status_code == 200
-    assert upd.json()["title"] == "Updated Resource"
 
     # Single availability check
     assert (
@@ -644,7 +637,7 @@ def test_resources_put_delete_and_availability_checks(
     assert chk_all.status_code == 200
     assert chk_all.json()["summary"]["total_checked"] >= 1
 
-    # DELETE /resources/{id} (soft archive, then hard delete)
+    # DELETE /resources/{id} (soft archive, update archived metadata, then tech_admin hard delete)
     assert client.delete(f"/api/v1/resources/{res_id}").status_code == 401
     assert (
         client.delete(
@@ -658,6 +651,21 @@ def test_resources_put_delete_and_availability_checks(
         ).status_code
         == 404
     )
+    # Hard deleting active resource is blocked (403 for content_admin, 409 for tech_admin)
+    assert (
+        client.delete(
+            f"/api/v1/resources/{res_id}?hard_delete=true",
+            headers=content_admin_headers,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/resources/{res_id}?hard_delete=true",
+            headers=tech_admin_headers,
+        ).status_code
+        == 409
+    )
     assert (
         client.delete(
             f"/api/v1/resources/{res_id}", headers=content_admin_headers
@@ -665,10 +673,28 @@ def test_resources_put_delete_and_availability_checks(
         == 200
     )
     assert client.get(f"/api/v1/resources/{res_id}").status_code == 404
+
+    # Updating archived resource validates URLs and succeeds
+    assert (
+        client.put(
+            f"/api/v1/resources/{res_id}",
+            json={"url": "invalid-url"},
+            headers=content_admin_headers,
+        ).status_code
+        == 400
+    )
+    upd = client.put(
+        f"/api/v1/resources/{res_id}",
+        json={"title": "Updated Resource", "url": "https://example.com/updated"},
+        headers=content_admin_headers,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["title"] == "Updated Resource"
+
     assert (
         client.delete(
             f"/api/v1/resources/{res_id}?hard_delete=true",
-            headers=content_admin_headers,
+            headers=tech_admin_headers,
         ).status_code
         == 200
     )
@@ -692,14 +718,20 @@ def test_roadmap_topic_subtopic_put_delete_and_reorder(
     )
     missing_id = uuid.uuid4()
 
+    # Staging (unpublished) items support direct CRUD; published items are immutable (409)
     t1 = client.post(
         "/api/v1/roadmap/topics",
-        json={"title": "Topic One", "slug": "topic-one", "order_index": 1},
+        json={"title": "Topic One", "slug": "topic-one", "order_index": 1, "is_published": False},
         headers=content_admin_headers,
     ).json()
     t2 = client.post(
         "/api/v1/roadmap/topics",
-        json={"title": "Topic Two", "slug": "topic-two", "order_index": 2},
+        json={"title": "Topic Two", "slug": "topic-two", "order_index": 2, "is_published": False},
+        headers=content_admin_headers,
+    ).json()
+    t_pub = client.post(
+        "/api/v1/roadmap/topics",
+        json={"title": "Published Topic", "slug": "published-topic-imm", "order_index": 3, "is_published": True},
         headers=content_admin_headers,
     ).json()
     s1 = client.post(
@@ -709,9 +741,53 @@ def test_roadmap_topic_subtopic_put_delete_and_reorder(
             "title": "Sub One",
             "slug": "sub-one",
             "order_index": 1,
+            "is_published": False,
         },
         headers=content_admin_headers,
     ).json()
+    s_pub = client.post(
+        "/api/v1/roadmap/subtopics",
+        json={
+            "topic_id": t_pub["id"],
+            "title": "Published Sub",
+            "slug": "published-sub-imm",
+            "order_index": 1,
+            "is_published": True,
+        },
+        headers=content_admin_headers,
+    ).json()
+
+    # Published topic/subtopic immutability guards
+    assert (
+        client.put(
+            f"/api/v1/roadmap/topics/{t_pub['id']}",
+            json={"title": "Bypass"},
+            headers=content_admin_headers,
+        ).status_code
+        == 409
+    )
+    assert (
+        client.delete(
+            f"/api/v1/roadmap/topics/{t_pub['id']}",
+            headers=content_admin_headers,
+        ).status_code
+        == 409
+    )
+    assert (
+        client.put(
+            f"/api/v1/roadmap/subtopics/{s_pub['id']}",
+            json={"title": "Bypass"},
+            headers=content_admin_headers,
+        ).status_code
+        == 409
+    )
+    assert (
+        client.delete(
+            f"/api/v1/roadmap/subtopics/{s_pub['id']}",
+            headers=content_admin_headers,
+        ).status_code
+        == 409
+    )
 
     # PUT /topics/{id}
     assert client.put(f"/api/v1/roadmap/topics/{t1['id']}", json={"title": "X"}).status_code == 401

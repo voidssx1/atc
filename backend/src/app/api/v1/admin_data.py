@@ -4,7 +4,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_role
-from app.models.user import UserRole
+from app.models.user import User, UserRole
+from app.services.audit import log_audit_event
 from app.services.data_transfer import data_transfer_service
 
 router = APIRouter(prefix="/admin/data", tags=["Data Import/Export & Bulk Operations"])
@@ -53,15 +54,27 @@ def export_roadmap_csv(db: Session = Depends(get_db)):
     dependencies=[Depends(require_role([UserRole.TECH_ADMIN]))],
 )
 def import_roadmap_json(
-    payload: List[Dict[str, Any]], db: Session = Depends(get_db)
+    payload: List[Dict[str, Any]],
+    current_admin: User = Depends(require_role([UserRole.TECH_ADMIN])),
+    db: Session = Depends(get_db),
 ):
     try:
-        count = data_transfer_service.import_roadmap_json(db, payload)
+        stats = data_transfer_service.import_roadmap_json_with_stats(db, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    return {"message": "Roadmap imported successfully", "imported_topics": count}
+    log_audit_event(
+        db=db,
+        action="roadmap_imported_json",
+        user_id=current_admin.id,
+        target_type="roadmap",
+        details=stats,
+    )
+    return {
+        "message": "Roadmap imported successfully",
+        **stats,
+    }
 
 
 @router.get(
@@ -88,12 +101,26 @@ def export_resources_csv(db: Session = Depends(get_db)):
     dependencies=[Depends(require_role([UserRole.TECH_ADMIN]))],
 )
 def import_resources_csv(
-    payload: ImportCSVRequest, db: Session = Depends(get_db)
+    payload: ImportCSVRequest,
+    current_admin: User = Depends(require_role([UserRole.TECH_ADMIN])),
+    db: Session = Depends(get_db),
 ):
     try:
-        count = data_transfer_service.import_resources_csv(db, payload.csv_content)
+        stats = data_transfer_service.import_resources_csv_with_stats(
+            db, payload.csv_content
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    return {"message": "Resources imported successfully", "imported_count": count}
+    log_audit_event(
+        db=db,
+        action="resources_imported_csv",
+        user_id=current_admin.id,
+        target_type="resource",
+        details=stats,
+    )
+    return {
+        "message": "Resources imported successfully",
+        **stats,
+    }

@@ -2,7 +2,10 @@
 
 This document explains how Clerk authentication, Svix webhook synchronization, Neon-backed opaque session management, RBAC role enforcement, and institutional email domain restrictions work in the **ATC DSA Roadmap & Resource Hub** backend.
 
-> **Verification Status**: Token exchange, JWT verification (`RS256` JWKS/PEM), Svix signature verification, session rotation/grace windows, single-session `tech_admin` enforcement, and outbox retries are all covered by mocked `pytest` tests (`78 passed` on SQLite). Live Clerk Dashboard integration (`great-bug-2878.clerk.accounts.dev`), live `CLERK_WEBHOOK_SECRET` deliveries, and live Cloudflare Worker `worker_settings_context` validation are **not yet verified** against production until secrets/placeholders are finalized and deployed.
+> **Verification Status & Architecture Decision**:
+> - **Selected Bearer Token Architecture**: Production runs with `AUTH_MODE = "clerk"`. Rather than setting `Set-Cookie`/`HttpOnly` session cookies and CSRF tokens, the backend exchanges a verified Clerk session JWT for an opaque Bearer `session_token` (stored hashed via SHA-256 in `user_sessions.token`) which the frontend holds strictly in JavaScript memory.
+> - **Verified Live (`https://atc-dsa-backend.webatc77.workers.dev`)**: Clerk Dev JWKS (`great-bug-2878.clerk.accounts.dev`), `RS256` Pyodide Web Crypto JWT verification, `TECH_ADMIN` live exchange (`POST /api/v1/auth/clerk/exchange` -> `200`), Neon `clerk_user_id` linking, `TECH_ADMIN` endpoint auth (`200`), live logout revocation (`200`), legacy `/auth/login` deprecation (`410`), and unauthenticated/unsigned rejection (`401`/`400`).
+> - **Pending Live Verification**: Live `@bennett.edu.in` student signup/session round-trip, live `POST /api/v1/auth/refresh` rotation, live Clerk Dashboard signed webhook deliveries (`CLERK_WEBHOOK_SECRET`), and live Worker Web Crypto PBKDF2 `600,000`-iteration benchmarking (legacy password paths are disabled in Clerk mode).
 
 ---
 

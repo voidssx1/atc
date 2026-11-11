@@ -34,7 +34,7 @@ class TestEmailRequest(BaseModel):
     dependencies=[Depends(require_role([UserRole.TECH_ADMIN]))],
 )
 async def trigger_availability_scan(
-    limit: int = 50, db: Session = Depends(get_db)
+    limit: int = Query(default=50, ge=1, le=50), db: Session = Depends(get_db)
 ):
     results = await job_runner.run_resource_availability_scan(db, limit=limit)
     return {"message": "Resource availability scan executed", "results": results}

@@ -3,9 +3,11 @@
 This document provides the complete integration contract for connecting a React (or React/Next.js) frontend to the **ATC DSA Roadmap & Resource Hub** backend (`https://atc-dsa-backend.webatc77.workers.dev`, prefix `/api/v1`).
 
 > **Integration Status (`Backend` branch)**:
-> - **Backend Deployed**: `https://atc-dsa-backend.webatc77.workers.dev` (`/health`, `/api/v1/docs`, `/api/v1/openapi.json`, localhost CORS preflight `http://localhost:5173`, `410`/`401`/`400` guards, and Neon/Hyperdrive empty reads `200 []` on warm isolates verified live; full route/RBAC/email/Clerk logic verified in local mocked `pytest` suite).
-> - **Frontend (`origin/frontend`) Not Yet Integrated**: The `origin/frontend` Vite/React app currently contains only static landing UI (`react` and `react-dom` only — no `@clerk/clerk-react`, no `VITE_API_BASE_URL`, and no calls to `/api/v1/auth/clerk/exchange`).
-> - **Unverified Live Items**: Real Clerk user JWT exchange (`POST /api/v1/auth/clerk/exchange`), initial seed data import (validated seed fixtures prepared in `backend/seeds/initial_roadmap.json` and `backend/seeds/initial_resources.csv`; Neon currently returns `[]`), and live Resend/Brevo email delivery.
+> - **Backend Live (`https://atc-dsa-backend.webatc77.workers.dev`)**: Verified live `/health` (`200`), `/api/v1/docs` & `/api/v1/openapi.json` (`200`, 58 paths / 72 ops), `http://localhost:5173` CORS preflight (`200`), `GET /api/v1/roadmap/topics` (`200`, 4 topics / 8 subtopics / 2 nested), `GET /api/v1/resources/` (`200`, 8 resources), `TECH_ADMIN` Clerk JWT exchange + `/auth/logout` (`200`), and `410`/`401`/`400` guards.
+> - **Frontend (`origin/frontend`) Pending Integration**: `origin/frontend` is currently a static landing page without `@clerk/clerk-react` or API wiring.
+> - **Integration & Handover Notes**:
+>   - Direct `PUT`/`DELETE` on published roadmap topics/subtopics and active resources returns **`409 Conflict`** — content edits must go through the `/api/v1/drafts/` workflow (`draft` -> `submit` -> independent `tech_admin` `approve`/`reject` -> `publish`, where creators cannot self-approve/self-reject `403`, and immutable revision history is queryable via `GET /api/v1/drafts/?entity_id=...&status=published`).
+>   - Live student (`@bennett.edu.in`) round-trip, `/auth/refresh` live rotation, Resend/Brevo email delivery, Clerk webhooks, Cron Triggers, and production Cloudflare Pages origin (`ALLOWED_ORIGINS` / `CLERK_ALLOWED_ORIGINS`) remain pending manual/live verification once frontend deployment URLs and DNS settings are finalized.
 
 ---
 
@@ -254,10 +256,10 @@ export async function apiFetch<T>(
 | **Admin Overview** | `GET /api/v1/dashboard/admin`, `GET /api/v1/analytics/resources`, `GET /api/v1/admin/audit-logs` | `viewer` |
 | **Roadmap CMS** | `GET /api/v1/roadmap/topics?include_unpublished=true`, `POST/PUT/DELETE /api/v1/roadmap/topics...`, `POST/PUT/DELETE /api/v1/roadmap/subtopics...`, `POST /api/v1/roadmap/reorder` | `viewer` (read), `content_admin` (write) |
 | **Resources CMS** | `GET /api/v1/resources/?include_archived=true`, `POST/PUT/DELETE /api/v1/resources...`, `POST /api/v1/resources/{id}/check-availability`, `POST /api/v1/resources/check-all-availability` | `viewer` (read), `content_admin` (write) |
-| **Drafts Queue (Authoring)** | `GET /api/v1/drafts/`, `GET /api/v1/drafts/{id}`, `POST /api/v1/drafts/`, `PUT /api/v1/drafts/{id}`, `POST /api/v1/drafts/{id}/submit`, `/archive`, `/restore` | `viewer` (read), `content_admin` (author) |
-| **Drafts Review (Sign-off)** | `POST /api/v1/drafts/{id}/approve`, `/reject`, `/publish` | `tech_admin` |
+| **Drafts Queue (Authoring)** | `GET /api/v1/drafts/?entity_id=...`, `GET /api/v1/drafts/{id}`, `POST /api/v1/drafts/`, `PUT /api/v1/drafts/{id}`, `POST /api/v1/drafts/{id}/submit`, `/archive`, `/restore` | `viewer` (read), `content_admin` (author) |
+| **Drafts Review (Sign-off)** | `POST /api/v1/drafts/{id}/approve`, `/reject`, `/publish` | `tech_admin` (non-creator; `403` on self-approval) |
 | **User Management** | `GET /api/v1/admin/users/`, `GET /api/v1/admin/users/{id}`, `GET /api/v1/profile/{user_id}`, `POST /api/v1/admin/users/`, `PATCH .../role`, `PATCH .../status`, `DELETE .../users/{id}` | `viewer` (read), `tech_admin` (write) |
-| **Import / Export** | `GET /api/v1/admin/data/export/{roadmap/json,roadmap/csv,resources/csv}`, `POST /api/v1/admin/data/import/{roadmap/json,resources/csv}` | `viewer` (export), `tech_admin` (import) |
+| **Import / Export** | `GET /api/v1/admin/data/export/{roadmap/json,roadmap/csv,resources/csv}`, `POST /api/v1/admin/data/import/{roadmap/json,resources/csv}` | `viewer` (export), `tech_admin` (bounded duplicate-safe import) |
 | **System Jobs & Outbox** | `POST /api/v1/admin/jobs/{run-availability-scan,cleanup-expired-sessions,process-clerk-outbox,test-email}`, `GET /api/v1/admin/jobs/clerk-outbox`, `POST .../retry` | `tech_admin` |
 
 ---
@@ -268,10 +270,21 @@ export async function apiFetch<T>(
 |---|---|
 | **Booting (`!isLoaded \|\| exchanging`)** | Show full-page skeleton/spinner until Clerk SDK finishes initializing AND `/auth/clerk/exchange` resolves (prevents flashing logged-out views). |
 | **`401 Unauthorized`** | First try silent `rotateBackendSession()` or Clerk `getToken({ skipCache: true })` + `/auth/clerk/exchange`. If exchange/refresh returns `401`, clear in-memory token, call Clerk `signOut()`, and redirect to `/sign-in?reason=session_expired`. |
-| **`403 Forbidden`** | Distinguish two cases from `detail`: (1) Email domain rejection (`@bennett.edu.in` required for students) -> show institutional-email error screen with sign-out button; (2) Insufficient RBAC role / inactive account -> show "Access Denied" state rather than triggering a logout loop. |
-| **`404 Not Found`** | Show clean empty/not-found state (also returned when students access unpublished topics or archived resources). |
-| **`409 Conflict`** | Display inline form error (e.g., duplicate username/email or account identity linking conflict requiring Tech Admin review). |
+| **`403 Forbidden`** | Distinguish three cases from `detail`: (1) Email domain rejection (`@bennett.edu.in` required for students) -> show institutional-email error screen with sign-out button; (2) Draft self-approval/self-publish restriction -> inform author that a second `tech_admin` must review; (3) Insufficient RBAC role / inactive account -> show "Access Denied" state rather than triggering a logout loop. |
+| **`404 Not Found`** | Show clean empty/not-found state (also returned when students access unpublished topics/subtopics or archived resources). |
+| **`409 Conflict`** | Display inline form error (duplicate username/email, identity conflict, or attempting direct `PUT`/`DELETE` on immutable published content — prompt to open a `ContentDraft` revision instead). |
 | **`410 Gone`** | Do not call legacy `/auth/login`, `/auth/register`, etc., when Clerk mode is active; route users exclusively through Clerk UI. |
 | **`422 Unprocessable Entity`** | Parse Pydantic's `detail` array (`loc[1]` gives field name, `msg` gives validation message) and bind errors directly to form inputs. |
 | **`429 Too Many Requests`** | Read `Retry-After` header (default `60`s), disable duplicate submit clicks/retry storms, and show a friendly cooldown notice. |
 | **`5xx / Network Error`** | Show non-blocking error banner with a manual "Retry" button; verify `ALLOWED_ORIGINS` if `fetch` fails with a CORS preflight error in DevTools. |
+
+---
+
+## 8. Frontend Integration Smoke-Test Checklist
+
+Run these manual smoke tests against `http://localhost:5173` after wiring `@clerk/clerk-react`:
+1. Public reads load without login: `GET /roadmap/topics` (`4` topics / `8` subtopics) and `GET /resources/` (`8` resources).
+2. Student login with `@bennett.edu.in`: Clerk `getToken()` -> `POST /auth/clerk/exchange` (`200`) -> token held in memory only (`localStorage` stays empty).
+3. Student write isolation: update `/profile/me`, toggle `/progress/{subtopic_id}`, add/remove `/bookmarks/{resource_id}`, reload page -> re-exchange restores state cleanly.
+4. Token refresh & logout: call `POST /auth/refresh`, confirm new token works, call `POST /auth/logout` before `signOut()`, confirm prior token returns `401`.
+5. Role guards: non-admin receives `403` on `/dashboard/admin`; `viewer` can open admin read views (`200`) and receives `403` on writes; `content_admin` submits draft (`200`) and distinct `tech_admin` approves/publishes (`200`).

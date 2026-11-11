@@ -219,6 +219,11 @@ def update_topic(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found"
         )
+    if topic.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published roadmap topics are immutable; create an approved content draft revision to modify or unpublish.",
+        )
 
     update_data = payload.model_dump(exclude_unset=True)
     if "slug" in update_data and update_data["slug"] != topic.slug:
@@ -268,6 +273,11 @@ def delete_topic(
     if not topic:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found"
+        )
+    if topic.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published roadmap topics cannot be directly deleted; unpublish via an approved content draft first.",
         )
 
     db.delete(topic)
@@ -319,6 +329,11 @@ def create_subtopic(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Parent subtopic not found",
+            )
+        if parent_sub.topic_id != payload.topic_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent subtopic must belong to the same topic",
             )
 
     subtopic = RoadmapSubtopic(**payload.model_dump())
@@ -375,8 +390,47 @@ def update_subtopic(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Subtopic not found"
         )
+    if subtopic.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published roadmap subtopics are immutable; create an approved content draft revision to modify or unpublish.",
+        )
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "parent_subtopic_id" in update_data and update_data["parent_subtopic_id"] is not None:
+        curr_id: Optional[uuid.UUID] = update_data["parent_subtopic_id"]
+        visited = {subtopic.id}
+        depth = 0
+        while curr_id is not None:
+            if curr_id in visited:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Circular parent_subtopic_id hierarchy detected",
+                )
+            visited.add(curr_id)
+            parent_row = (
+                db.query(RoadmapSubtopic)
+                .filter(RoadmapSubtopic.id == curr_id)
+                .first()
+            )
+            if not parent_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Parent subtopic not found",
+                )
+            if depth == 0 and parent_row.topic_id != subtopic.topic_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Parent subtopic must belong to the same topic",
+                )
+            curr_id = parent_row.parent_subtopic_id
+            depth += 1
+            if depth > 64:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Subtopic hierarchy exceeds maximum nesting depth",
+                )
+
     for field, val in update_data.items():
         setattr(subtopic, field, val)
 
@@ -420,6 +474,11 @@ def delete_subtopic(
     if not subtopic:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Subtopic not found"
+        )
+    if subtopic.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Published roadmap subtopics cannot be directly deleted; unpublish via an approved content draft first.",
         )
 
     db.delete(subtopic)

@@ -42,7 +42,7 @@ def create_bookmark(
         .filter(Resource.id == payload.resource_id)
         .first()
     )
-    if not resource:
+    if not resource or resource.is_archived:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found"
         )

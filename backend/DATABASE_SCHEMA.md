@@ -2,7 +2,8 @@
 
 This document describes the relational schema, constraints, indexes, Alembic migration history, and Neon PostgreSQL + Cloudflare Hyperdrive connection architecture for the **ATC DSA Roadmap & Resource Hub** backend (`13` application tables).
 
-> **Verification Status**: All 13 SQLAlchemy models and migrations (`001_initial_schema` -> `002_profile_analytics` -> `003_clerk_auth_policies`) are verified against in-memory SQLite in `pytest` (`78 passed`) and Alembic offline/metadata inspection. Live execution of `003_clerk_auth_policies` and live Hyperdrive queries against production **Neon PostgreSQL** are **not yet verified** until `alembic upgrade head` is run against Neon and the Worker is deployed.
+> **Verification Status**: All 13 SQLAlchemy models and migrations (`001_initial_schema` -> `002_profile_analytics` -> `003_clerk_auth_policies`) are verified against in-memory SQLite in `pytest`, and revision `003_clerk_auth_policies (head)` + live Hyperdrive connectivity are verified against production **Neon PostgreSQL** (`4` topics, `8` subtopics, `8` resources, `1` linked `TECH_ADMIN` user).
+> - **Engine Reuse**: `_engines` caches the Hyperdrive engine under a stable `"hyperdrive"` key (`NullPool`), injecting each request's ephemeral DSN via `_active_db_url_ctx` + SQLAlchemy `do_connect`, and pre-importing `psycopg` + `sqlalchemy.dialects.postgresql.psycopg` at module import for Worker snapshotting.
 
 ---
 

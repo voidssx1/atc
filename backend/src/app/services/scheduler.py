@@ -18,13 +18,16 @@ _scheduled_lock = asyncio.Lock()
 class JobRunnerService:
     @staticmethod
     async def run_resource_availability_scan(db: Session, limit: int = 50) -> dict:
-        resources = (
+        bounded_limit = max(1, min(int(limit), 50))
+        query = (
             db.query(Resource)
             .filter(Resource.is_archived == False)  # noqa: E712
             .order_by(Resource.last_checked_at.asc().nullsfirst())
-            .limit(limit)
-            .all()
+            .limit(bounded_limit)
         )
+        if db.bind and db.bind.dialect.name == "postgresql":
+            query = query.with_for_update(skip_locked=True)
+        resources = query.all()
         checked = 0
         broken = 0
         degraded = 0

@@ -165,6 +165,16 @@ async def update_resource(
         )
 
     update_data = payload.model_dump(exclude_unset=True)
+    # Active (non-archived) published resources cannot be silently rewritten outside
+    # the draft approval workflow; soft-archiving via is_archived=True remains allowed.
+    if not res.is_archived and not (
+        set(update_data.keys()) == {"is_archived"} and update_data.get("is_archived") is True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active published resources are immutable; create an approved content draft revision to modify.",
+        )
+
     if "url" in update_data and update_data["url"] != res.url:
         if not validate_url_format(update_data["url"]):
             raise HTTPException(
@@ -206,6 +216,16 @@ def delete_or_archive_resource(
         )
 
     if hard_delete:
+        if current_admin.role != UserRole.TECH_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only tech_admin can permanently delete archived resources",
+            )
+        if not res.is_archived:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Archive a published resource before permanent deletion",
+            )
         db.delete(res)
         action = "resource_deleted"
     else:
@@ -265,7 +285,7 @@ async def check_single_resource_availability(
     ],
 )
 async def check_all_resources_availability(
-    limit: int = 50, db: Session = Depends(get_db)
+    limit: int = Query(default=50, ge=1, le=50), db: Session = Depends(get_db)
 ):
     from app.services.scheduler import job_runner
 
