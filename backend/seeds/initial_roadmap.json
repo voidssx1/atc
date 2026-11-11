@@ -1,0 +1,118 @@
+[
+  {
+    "title": "Arrays & Hashing",
+    "slug": "arrays-and-hashing",
+    "description": "Foundational linear data structures, frequency maps, prefix sums, and constant-time lookup patterns.",
+    "order_index": 1,
+    "is_published": true,
+    "subtopics": [
+      {
+        "id": "11111111-1111-4111-8111-111111111101",
+        "title": "Dynamic Arrays & Prefix Sums",
+        "slug": "dynamic-arrays-prefix-sums",
+        "description": "Amortized resizing, range sum queries, and difference arrays.",
+        "order_index": 1,
+        "difficulty": "easy",
+        "is_published": true,
+        "parent_subtopic_id": null
+      },
+      {
+        "id": "11111111-1111-4111-8111-111111111102",
+        "title": "Hash Tables & Collision Handling",
+        "slug": "hash-tables-collisions",
+        "description": "Two-sum patterns, grouping anagrams, and longest consecutive sequence.",
+        "order_index": 2,
+        "difficulty": "medium",
+        "is_published": true,
+        "parent_subtopic_id": null
+      }
+    ]
+  },
+  {
+    "title": "Two Pointers & Sliding Window",
+    "slug": "two-pointers-sliding-window",
+    "description": "O(n) traversal techniques for sorted arrays, palindromes, and variable/fixed window constraints.",
+    "order_index": 2,
+    "is_published": true,
+    "subtopics": [
+      {
+        "id": "22222222-2222-4222-8222-222222222201",
+        "title": "Converging & Fast-Slow Pointers",
+        "slug": "converging-fast-slow-pointers",
+        "description": "Pairwise sorted array scans, 3Sum, and cycle detection.",
+        "order_index": 1,
+        "difficulty": "easy",
+        "is_published": true,
+        "parent_subtopic_id": null
+      },
+      {
+        "id": "22222222-2222-4222-8222-222222222202",
+        "title": "Variable-Length Sliding Window",
+        "slug": "variable-sliding-window",
+        "description": "Subarray sum constraints and longest substring without repeating characters.",
+        "order_index": 2,
+        "difficulty": "medium",
+        "is_published": true,
+        "parent_subtopic_id": "22222222-2222-4222-8222-222222222201"
+      }
+    ]
+  },
+  {
+    "title": "Trees & Graphs",
+    "slug": "trees-and-graphs",
+    "description": "Hierarchical traversals, BFS/DFS, shortest paths, and topological ordering.",
+    "order_index": 3,
+    "is_published": true,
+    "subtopics": [
+      {
+        "id": "33333333-3333-4333-8333-333333333301",
+        "title": "Binary Trees & BST Traversals",
+        "slug": "binary-trees-bst",
+        "description": "Preorder/inorder/postorder recursion, level-order BFS, and BST validation.",
+        "order_index": 1,
+        "difficulty": "medium",
+        "is_published": true,
+        "parent_subtopic_id": null
+      },
+      {
+        "id": "33333333-3333-4333-8333-333333333302",
+        "title": "Shortest Paths & Dijkstra",
+        "slug": "shortest-paths-dijkstra",
+        "description": "Unweighted BFS shortest path and weighted priority-queue Dijkstra.",
+        "order_index": 2,
+        "difficulty": "hard",
+        "is_published": true,
+        "parent_subtopic_id": null
+      }
+    ]
+  },
+  {
+    "title": "Dynamic Programming",
+    "slug": "dynamic-programming",
+    "description": "Overlapping subproblems, memoization, tabulation, and space-optimized state transitions.",
+    "order_index": 4,
+    "is_published": true,
+    "subtopics": [
+      {
+        "id": "44444444-4444-4444-8444-444444444401",
+        "title": "1D DP & Knapsack Fundamentals",
+        "slug": "1d-dp-knapsack",
+        "description": "Climbing stairs, house robber, and 0/1 knapsack subset sums.",
+        "order_index": 1,
+        "difficulty": "medium",
+        "is_published": true,
+        "parent_subtopic_id": null
+      },
+      {
+        "id": "44444444-4444-4444-8444-444444444402",
+        "title": "2D Grid & LCS Transitions",
+        "slug": "2d-grid-lcs",
+        "description": "Grid path counting, edit distance, and longest common subsequence.",
+        "order_index": 2,
+        "difficulty": "hard",
+        "is_published": true,
+        "parent_subtopic_id": "44444444-4444-4444-8444-444444444401"
+      }
+    ]
+  }
+]

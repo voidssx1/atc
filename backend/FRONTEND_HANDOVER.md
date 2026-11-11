@@ -2,7 +2,10 @@
 
 This document provides the complete integration contract for connecting a React (or React/Next.js) frontend to the **ATC DSA Roadmap & Resource Hub** backend (`https://atc-dsa-backend.webatc77.workers.dev`, prefix `/api/v1`).
 
-> **Integration Status**: Local backend tests (`78 passed` on SQLite with mocked Clerk/Resend/Brevo) verify all 72 API routes, auth exchange, rotation, and RBAC rules. Live browser CORS and end-to-end Clerk JWT exchange against the deployed Cloudflare Worker have **not yet been verified** in production (`ALLOWED_ORIGINS` and `CLERK_ALLOWED_ORIGINS` in `backend/wrangler.toml` still contain `https://REPLACE_WITH_FRONTEND_DOMAIN`).
+> **Integration Status (`Backend` branch)**:
+> - **Backend Deployed**: `https://atc-dsa-backend.webatc77.workers.dev` (`/health`, `/api/v1/docs`, `/api/v1/openapi.json`, localhost CORS preflight `http://localhost:5173`, `410`/`401`/`400` guards, and Neon/Hyperdrive empty reads `200 []` on warm isolates verified live; full route/RBAC/email/Clerk logic verified in local mocked `pytest` suite).
+> - **Frontend (`origin/frontend`) Not Yet Integrated**: The `origin/frontend` Vite/React app currently contains only static landing UI (`react` and `react-dom` only — no `@clerk/clerk-react`, no `VITE_API_BASE_URL`, and no calls to `/api/v1/auth/clerk/exchange`).
+> - **Unverified Live Items**: Real Clerk user JWT exchange (`POST /api/v1/auth/clerk/exchange`), initial seed data import (validated seed fixtures prepared in `backend/seeds/initial_roadmap.json` and `backend/seeds/initial_resources.csv`; Neon currently returns `[]`), and live Resend/Brevo email delivery.
 
 ---
 
@@ -20,11 +23,21 @@ This document provides the complete integration contract for connecting a React 
 Before any browser request from your frontend origin can succeed:
 1. **`ALLOWED_ORIGINS`** (in `backend/wrangler.toml` for Cloudflare, `.env` locally):
    - Must contain exact scheme + host (+ port if non-default), comma-separated with no trailing slashes (e.g., `https://atc-dsa.vercel.app,http://localhost:5173`).
-   - Currently configured in `wrangler.toml` as `https://REPLACE_WITH_FRONTEND_DOMAIN`.
+   - Currently configured in `wrangler.toml` as `http://localhost:5173` (ready for local Vite dev server; add your deployed frontend domain before production frontend rollout).
    - `DynamicCORSMiddleware` configures `allow_credentials=True`, all HTTP methods, and all headers only for origins matching this list (including on `429` rate-limit responses).
 2. **`CLERK_ALLOWED_ORIGINS`** (in `backend/wrangler.toml`):
-   - Comma-separated exact origins validated against the `azp` (authorized party) claim inside Clerk JWTs during `POST /api/v1/auth/clerk/exchange`.
+   - Comma-separated exact origins validated against the `azp` (authorized party) claim inside Clerk JWTs during `POST /api/v1/auth/clerk/exchange` (currently `http://localhost:5173`).
    - When non-empty in production, any Clerk JWT whose `azp` claim does not match this allowlist is rejected with `401 Unauthorized`.
+
+### 1.3 Prepared Initial Seed Dataset (`backend/seeds/`)
+
+Validated initial DSA content fixtures are stored in:
+- `backend/seeds/initial_roadmap.json` (4 topics, 8 subtopics including nested child subtopics)
+- `backend/seeds/initial_resources.csv` (8 curated DSA resources)
+
+To seed an environment once authenticated as a `tech_admin`, import via the supported API endpoints:
+1. `POST /api/v1/admin/data/import/roadmap/json` with the JSON array from `backend/seeds/initial_roadmap.json`
+2. `POST /api/v1/admin/data/import/resources/csv` with `{"csv_content": "<contents of backend/seeds/initial_resources.csv>"}`
 
 ---
 

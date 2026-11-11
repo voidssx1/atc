@@ -69,16 +69,23 @@ def get_roadmap_topics(
         query = query.filter(RoadmapTopic.is_published == True)  # noqa: E712
 
     topics = query.order_by(RoadmapTopic.order_index.asc()).all()
-    results = []
+    if not topics:
+        return []
 
+    topic_ids = [t.id for t in topics]
+    sub_query = db.query(RoadmapSubtopic).filter(
+        RoadmapSubtopic.topic_id.in_(topic_ids)
+    )
+    if not include_unpublished:
+        sub_query = sub_query.filter(RoadmapSubtopic.is_published == True)  # noqa: E712
+
+    subtopics_by_topic: dict[uuid.UUID, List[RoadmapSubtopic]] = {}
+    for sub in sub_query.all():
+        subtopics_by_topic.setdefault(sub.topic_id, []).append(sub)
+
+    results = []
     for t in topics:
-        sub_query = db.query(RoadmapSubtopic).filter(
-            RoadmapSubtopic.topic_id == t.id
-        )
-        if not include_unpublished:
-            sub_query = sub_query.filter(RoadmapSubtopic.is_published == True)  # noqa: E712
-        subtopics = sub_query.all()
-        tree = build_subtopic_tree(subtopics, parent_id=None)
+        tree = build_subtopic_tree(subtopics_by_topic.get(t.id, []), parent_id=None)
 
         results.append(
             RoadmapTopicDetailResponse(

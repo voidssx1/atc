@@ -1,3 +1,4 @@
+import inspect
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Generator, Iterator, Optional
@@ -14,6 +15,15 @@ from app.core.config import (
     get_settings,
     parse_database_url,
 )
+
+# Pre-import PostgreSQL driver & dialect at module load so Cloudflare Python Workers
+# includes their initialization inside the deploy-time WASM memory snapshot instead of
+# hitting request CPU limits on the first DB request.
+try:
+    import psycopg  # noqa: F401
+    import sqlalchemy.dialects.postgresql.psycopg  # noqa: F401
+except ImportError:
+    pass
 
 # Global engine cache keyed by stable structural identity (never rotating tokens)
 _engines: Dict[str, Engine] = {}
@@ -156,4 +166,34 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
     """
     env = resolve_worker_env_from_request(request)
     with open_db_session(env=env) as db:
+        yield db
+
+
+@contextmanager
+def resolve_request_db_session(request: Optional[Request]) -> Iterator[Session]:
+    """
+    Open a request-scoped DB session on demand (after JWT/webhook verification),
+    honoring FastAPI `dependency_overrides[get_db]` in tests.
+    """
+    app_obj = getattr(request, "app", None) if request is not None else None
+    overrides = getattr(app_obj, "dependency_overrides", None)
+    override = overrides.get(get_db) if isinstance(overrides, dict) else None
+    if override is not None:
+        params = inspect.signature(override).parameters
+        gen = override(request) if params else override()
+        db = next(gen)
+        try:
+            yield db
+        finally:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+            except Exception:
+                close_fn = getattr(gen, "close", None)
+                if callable(close_fn):
+                    close_fn()
+        return
+
+    with open_db_session(env=resolve_worker_env_from_request(request)) as db:
         yield db

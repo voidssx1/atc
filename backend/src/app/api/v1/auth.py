@@ -10,6 +10,7 @@ from app.api.deps import (
     get_inactivity_delta,
     oauth2_scheme,
 )
+from app.db.session import resolve_request_db_session
 from app.core.config import get_settings
 from app.core.security import (
     generate_random_token,
@@ -195,10 +196,10 @@ async def exchange_clerk_token(
     request: Request,
     payload: Optional[ClerkExchangeRequest] = None,
     authorization: Optional[str] = Header(default=None),
-    db: Session = Depends(get_db),
 ):
     """
     Exchange a verified Clerk session JWT for a Neon-backed opaque application session.
+    Opens the database session only after Clerk JWT and user verification succeed.
     """
     raw_clerk_jwt: Optional[str] = None
     if authorization and authorization.lower().startswith("bearer "):
@@ -225,217 +226,218 @@ async def exchange_clerk_token(
     except ClerkAPIError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
-    # Reconciliation: immediately deactivate local user & revoke sessions if banned/locked in Clerk
-    existing_linked = (
-        db.query(User).filter(User.clerk_user_id == identity.clerk_user_id).first()
-    )
-    if identity.banned or identity.locked:
-        if existing_linked:
-            existing_linked.is_active = False
-            _hard_revoke_sessions(db, user_id=existing_linked.id)
-            db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is banned or locked",
-        )
-
     if not identity.email or not identity.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A verified email address is required",
         )
 
-    user: Optional[User] = existing_linked
-
-    if user:
-        if not user.is_active:
+    with resolve_request_db_session(request) as db:
+        # Reconciliation: immediately deactivate local user & revoke sessions if banned/locked in Clerk
+        existing_linked = (
+            db.query(User).filter(User.clerk_user_id == identity.clerk_user_id).first()
+        )
+        if identity.banned or identity.locked:
+            if existing_linked:
+                existing_linked.is_active = False
+                _hard_revoke_sessions(db, user_id=existing_linked.id)
+                db.commit()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is deactivated. Please contact support.",
+                detail="User account is banned or locked",
             )
-        # Reconcile verified email changes safely
-        if user.email != identity.email:
-            if user.role == UserRole.STUDENT and not is_allowed_student_email(identity.email):
-                user.is_active = False
-                _hard_revoke_sessions(db, user_id=user.id)
-                db.commit()
+
+        user: Optional[User] = existing_linked
+
+        if user:
+            if not user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Student accounts must maintain a verified @bennett.edu.in email",
+                    detail="Account is deactivated. Please contact support.",
                 )
-            conflict = db.query(User).filter(User.email == identity.email, User.id != user.id).first()
-            if conflict:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Updated email address is already associated with another account",
-                )
-            user.email = identity.email
-        user.is_verified = True
-        if identity.updated_at is not None:
-            user.clerk_updated_at = identity.updated_at
-        db.flush()
-    else:
-        # Check for unlinked pre-provisioned local account matching verified email
-        email_query = db.query(User).filter(User.email == identity.email)
-        if db.bind and db.bind.dialect.name == "postgresql":
-            email_query = email_query.with_for_update()
-        user_by_email = email_query.first()
+            # Reconcile verified email changes safely
+            if user.email != identity.email:
+                if user.role == UserRole.STUDENT and not is_allowed_student_email(identity.email):
+                    user.is_active = False
+                    _hard_revoke_sessions(db, user_id=user.id)
+                    db.commit()
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Student accounts must maintain a verified @bennett.edu.in email",
+                    )
+                conflict = db.query(User).filter(User.email == identity.email, User.id != user.id).first()
+                if conflict:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Updated email address is already associated with another account",
+                    )
+                user.email = identity.email
+            user.is_verified = True
+            if identity.updated_at is not None:
+                user.clerk_updated_at = identity.updated_at
+            db.flush()
+        else:
+            # Check for unlinked pre-provisioned local account matching verified email
+            email_query = db.query(User).filter(User.email == identity.email)
+            if db.bind and db.bind.dialect.name == "postgresql":
+                email_query = email_query.with_for_update()
+            user_by_email = email_query.first()
 
-        if user_by_email:
-            if user_by_email.clerk_user_id is not None:
-                if user_by_email.clerk_user_id == identity.clerk_user_id:
+            if user_by_email:
+                if user_by_email.clerk_user_id is not None:
+                    if user_by_email.clerk_user_id == identity.clerk_user_id:
+                        if not user_by_email.is_active:
+                            raise HTTPException(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Account is deactivated. Please contact support.",
+                            )
+                        user = user_by_email
+                    else:
+                        log_audit_event(
+                            db=db,
+                            action="clerk_link_conflict",
+                            user_id=user_by_email.id,
+                            target_type="user",
+                            target_id=str(user_by_email.id),
+                            ip_address=request.client.host if request.client else None,
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Account is already linked to a different authentication identity",
+                        )
+                else:
                     if not user_by_email.is_active:
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
                             detail="Account is deactivated. Please contact support.",
                         )
-                    user = user_by_email
-                else:
-                    log_audit_event(
-                        db=db,
-                        action="clerk_link_conflict",
-                        user_id=user_by_email.id,
-                        target_type="user",
-                        target_id=str(user_by_email.id),
-                        ip_address=request.client.host if request.client else None,
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Account is already linked to a different authentication identity",
-                    )
-            else:
-                if not user_by_email.is_active:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Account is deactivated. Please contact support.",
-                    )
-                try:
-                    with db.begin_nested():
-                        user_by_email.clerk_user_id = identity.clerk_user_id
-                        user_by_email.clerk_updated_at = identity.updated_at
-                        user_by_email.is_verified = True
-                        db.flush()
-                    user = user_by_email
-                    log_audit_event(
-                        db=db,
-                        action="clerk_account_linked",
-                        user_id=user.id,
-                        target_type="user",
-                        target_id=str(user.id),
-                        details={"role": user.role.value},
-                        ip_address=request.client.host if request.client else None,
-                    )
-                except IntegrityError:
-                    # Handle concurrent link collision via re-query
-                    reloaded = (
-                        db.query(User)
-                        .filter(User.clerk_user_id == identity.clerk_user_id)
-                        .first()
-                    )
-                    if reloaded:
-                        if not reloaded.is_active:
-                            raise HTTPException(
-                                status_code=status.HTTP_403_FORBIDDEN,
-                                detail="Account is deactivated. Please contact support.",
-                            )
-                        user = reloaded
-                    else:
-                        reloaded_email = (
+                    try:
+                        with db.begin_nested():
+                            user_by_email.clerk_user_id = identity.clerk_user_id
+                            user_by_email.clerk_updated_at = identity.updated_at
+                            user_by_email.is_verified = True
+                            db.flush()
+                        user = user_by_email
+                        log_audit_event(
+                            db=db,
+                            action="clerk_account_linked",
+                            user_id=user.id,
+                            target_type="user",
+                            target_id=str(user.id),
+                            details={"role": user.role.value},
+                            ip_address=request.client.host if request.client else None,
+                        )
+                    except IntegrityError:
+                        # Handle concurrent link collision via re-query
+                        reloaded = (
                             db.query(User)
-                            .filter(User.email == identity.email)
+                            .filter(User.clerk_user_id == identity.clerk_user_id)
                             .first()
                         )
-                        if reloaded_email and reloaded_email.clerk_user_id == identity.clerk_user_id:
-                            if not reloaded_email.is_active:
+                        if reloaded:
+                            if not reloaded.is_active:
                                 raise HTTPException(
                                     status_code=status.HTTP_403_FORBIDDEN,
                                     detail="Account is deactivated. Please contact support.",
                                 )
-                            user = reloaded_email
+                            user = reloaded
                         else:
-                            raise HTTPException(
-                                status_code=status.HTTP_409_CONFLICT,
-                                detail="Account is already linked to a different authentication identity",
+                            reloaded_email = (
+                                db.query(User)
+                                .filter(User.email == identity.email)
+                                .first()
                             )
-        else:
-            # New public registration -> strictly @bennett.edu.in & STUDENT role only
-            if not is_allowed_student_email(identity.email):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Registration is restricted strictly to @bennett.edu.in email addresses",
-                )
-
-            base_username = identity.email.split("@")[0]
-            username_clean = base_username
-            if db.query(User).filter(User.username == username_clean).first():
-                username_clean = f"{base_username}_{generate_random_token(4)}"
-
-            try:
-                with db.begin_nested():
-                    user = User(
-                        email=identity.email,
-                        username=username_clean,
-                        clerk_user_id=identity.clerk_user_id,
-                        clerk_updated_at=identity.updated_at,
-                        hashed_password=None,
-                        role=UserRole.STUDENT,
-                        is_active=True,
-                        is_verified=True,
-                    )
-                    db.add(user)
-                    db.flush()
-
-                    profile = StudentProfile(
-                        user_id=user.id,
-                        full_name=identity.full_name or username_clean,
-                    )
-                    db.add(profile)
-                    db.flush()
-
-                log_audit_event(
-                    db=db,
-                    action="user_registered",
-                    user_id=user.id,
-                    target_type="user",
-                    target_id=str(user.id),
-                    details={"role": user.role.value, "provider": "clerk"},
-                    ip_address=request.client.host if request.client else None,
-                )
-            except IntegrityError:
-                # Concurrent first-login request already created this account
-                user = (
-                    db.query(User)
-                    .filter(User.clerk_user_id == identity.clerk_user_id)
-                    .first()
-                )
-                if not user:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Account registration conflict; please retry login.",
-                    )
-                if not user.is_active:
+                            if reloaded_email and reloaded_email.clerk_user_id == identity.clerk_user_id:
+                                if not reloaded_email.is_active:
+                                    raise HTTPException(
+                                        status_code=status.HTTP_403_FORBIDDEN,
+                                        detail="Account is deactivated. Please contact support.",
+                                    )
+                                user = reloaded_email
+                            else:
+                                raise HTTPException(
+                                    status_code=status.HTTP_409_CONFLICT,
+                                    detail="Account is already linked to a different authentication identity",
+                                )
+            else:
+                # New public registration -> strictly @bennett.edu.in & STUDENT role only
+                if not is_allowed_student_email(identity.email):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Account is deactivated. Please contact support.",
+                        detail="Registration is restricted strictly to @bennett.edu.in email addresses",
                     )
 
-    token_response = _issue_application_session(
-        db=db,
-        user=user,
-        request=request,
-        clerk_session_id=clerk_sid,
-    )
+                base_username = identity.email.split("@")[0]
+                username_clean = base_username
+                if db.query(User).filter(User.username == username_clean).first():
+                    username_clean = f"{base_username}_{generate_random_token(4)}"
 
-    log_audit_event(
-        db=db,
-        action="user_login",
-        user_id=user.id,
-        target_type="user",
-        target_id=str(user.id),
-        details={"provider": "clerk"},
-        ip_address=request.client.host if request.client else None,
-    )
-    return token_response
+                try:
+                    with db.begin_nested():
+                        user = User(
+                            email=identity.email,
+                            username=username_clean,
+                            clerk_user_id=identity.clerk_user_id,
+                            clerk_updated_at=identity.updated_at,
+                            hashed_password=None,
+                            role=UserRole.STUDENT,
+                            is_active=True,
+                            is_verified=True,
+                        )
+                        db.add(user)
+                        db.flush()
+
+                        profile = StudentProfile(
+                            user_id=user.id,
+                            full_name=identity.full_name or username_clean,
+                        )
+                        db.add(profile)
+                        db.flush()
+
+                    log_audit_event(
+                        db=db,
+                        action="user_registered",
+                        user_id=user.id,
+                        target_type="user",
+                        target_id=str(user.id),
+                        details={"role": user.role.value, "provider": "clerk"},
+                        ip_address=request.client.host if request.client else None,
+                    )
+                except IntegrityError:
+                    # Concurrent first-login request already created this account
+                    user = (
+                        db.query(User)
+                        .filter(User.clerk_user_id == identity.clerk_user_id)
+                        .first()
+                    )
+                    if not user:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Account registration conflict; please retry login.",
+                        )
+                    if not user.is_active:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Account is deactivated. Please contact support.",
+                        )
+
+        token_response = _issue_application_session(
+            db=db,
+            user=user,
+            request=request,
+            clerk_session_id=clerk_sid,
+        )
+
+        log_audit_event(
+            db=db,
+            action="user_login",
+            user_id=user.id,
+            target_type="user",
+            target_id=str(user.id),
+            details={"provider": "clerk"},
+            ip_address=request.client.host if request.client else None,
+        )
+        return token_response
 
 
 @router.post("/sessions/revoke-all")

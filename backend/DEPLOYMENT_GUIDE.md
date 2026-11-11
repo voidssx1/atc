@@ -2,9 +2,10 @@
 
 This guide covers configuring Neon PostgreSQL, Cloudflare Hyperdrive, Cloudflare Secrets & Variables, Clerk webhooks, Resend/Brevo email delivery, Cloudflare Workers Rate Limiting / optional Zone WAF rules, Python Workers deployment (`pywrangler`), smoke testing, and rollback procedures for `atc-dsa-backend`.
 
-> **Current Verification Boundary**:
-> - **Verified Locally**: `python -m compileall -q app tests` (exit `0`), `python -m pytest -v --tb=short` (`78 passed` on SQLite with mocked external APIs & mocked `RateLimit` bindings), and `npx --yes wrangler deploy --dry-run` (exit `0`, bound `HYPERDRIVE` + `RL_AUTH_EXCHANGE`, `RL_AUTH_REFRESH`, `RL_ANALYTICS`, `RL_WEBHOOKS`).
-> - **Not Yet Verified in Production**: Live Neon Migration `003` application, `pywrangler sync` / `pywrangler deploy` packaging, live `*.workers.dev` HTTP/Cron execution, live Hyperdrive connectivity, live Clerk JWT/Svix webhooks, live Cloudflare edge rate limiting, and live Resend/Brevo email sends.
+> **Current Verification Boundary (`Backend` branch)**:
+> - **Verified Locally**: Python compilation (`python -m compileall -q src tests`), SQLite + mocked-external-provider `pytest` test suite (covering all routes, Clerk/Svix mocks, RBAC, Resend/Brevo fallback logic, Hyperdrive engine reuse, and `backend/seeds/` dataset validation), and Linux CI `pywrangler sync` + `wrangler deploy --dry-run`.
+> - **Verified Live (`https://atc-dsa-backend.webatc77.workers.dev`)**: Worker deployed via `.github/workflows/deploy-backend.yml`; `GET /health` (`200`), `GET /api/v1/openapi.json` (`200`), `GET /api/v1/docs` (`200`), `OPTIONS` CORS preflight for `http://localhost:5173` (`200`), Clerk dev JWKS endpoint reachability (`200`), legacy `/api/v1/auth/login` deprecation (`410`), auth guards (`401`), Svix webhook header rejection (`400`), and live Neon/Hyperdrive reads returning `200 []` on warm isolates.
+> - **Not Yet Verified / Pending Integration**: End-to-end live Clerk JWT exchange with a real Clerk user session (`POST /api/v1/auth/clerk/exchange` hit Cloudflare `1102` cold-isolate CPU limits before pre-import/lazy-DB fixes; re-verify after redeployment), `origin/frontend` Clerk React integration (`origin/frontend` currently has no `@clerk/clerk-react` or API client), initial seed dataset import into Neon (`[]`), and live Resend/Brevo email delivery & Cron execution.
 
 ---
 
@@ -38,8 +39,8 @@ Never commit real secrets into git or `backend/wrangler.toml`. Configure secrets
 | `CLOUDFLARE_ORIGIN_URL` | `"https://atc-dsa-backend.webatc77.workers.dev"` | Set for `*.workers.dev` |
 | `CLERK_JWKS_URL` | `"https://great-bug-2878.clerk.accounts.dev/.well-known/jwks.json"` | Configured for Clerk dev instance |
 | `CLERK_ISSUER` | `"https://great-bug-2878.clerk.accounts.dev"` | Configured for Clerk dev instance |
-| `ALLOWED_ORIGINS` | `"https://REPLACE_WITH_FRONTEND_DOMAIN"` | **Replace** with real frontend origin(s) before browser requests (and before expecting non-`500` startup checks if needed) |
-| `CLERK_ALLOWED_ORIGINS` | `"https://REPLACE_WITH_FRONTEND_DOMAIN"` | **Replace** with exact frontend origin(s) matching Clerk JWT `azp` claim (`validate_production_clerk_config` rejects `REPLACE_WITH_*` with HTTP `500`) |
+| `ALLOWED_ORIGINS` | `"http://localhost:5173"` | Dev localhost active for testing; update with deployed frontend origin(s) before frontend production cutover |
+| `CLERK_ALLOWED_ORIGINS` | `"http://localhost:5173"` | Dev localhost active for Clerk JWT `azp` claim; update with deployed frontend origin(s) before production cutover |
 
 ---
 
