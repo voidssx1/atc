@@ -266,10 +266,46 @@ def test_worker_settings_cache_preserves_rotating_hyperdrive_and_isolation():
     assert "user_2:tok_2" in url_2
 
 
-def test_app_startup_prewarms_openapi_middleware_and_psycopg_utc():
-    """Verify FastAPI OpenAPI schema, middleware stack, and psycopg UTC cache warm at import time."""
-    assert app.openapi_schema is not None
-    assert app.middleware_stack is not None
+def test_app_startup_defers_openapi_and_middleware_while_keeping_psycopg_utc_seed():
+    """Fresh Worker import must defer OpenAPI/middleware allocation while serving OpenAPI on demand."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    backend_src = str(Path(__file__).resolve().parent.parent / "src")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (
+        f"{backend_src}{os.pathsep}{env['PYTHONPATH']}"
+        if env.get("PYTHONPATH")
+        else backend_src
+    )
+
+    probe = (
+        "import app.main as m, app.core.config as cfg, app.db.session as sess; "
+        "assert m.app.openapi_schema is None, 'openapi_schema eagerly built at startup'; "
+        "assert m.app.middleware_stack is None, 'middleware_stack eagerly built at startup'; "
+        "assert len(cfg._STATIC_SETTINGS_CACHE) == 0; "
+        "assert len(sess._engines) == 0"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", probe],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert proc.returncode == 0
+
+    with TestClient(app) as client:
+        openapi_resp = client.get("/api/v1/openapi.json")
+        assert openapi_resp.status_code == 200
+        spec = openapi_resp.json()
+        assert len(spec.get("paths", {})) >= 50
+        assert app.openapi_schema is not None
+
+        docs_resp = client.get("/api/v1/docs")
+        assert docs_resp.status_code == 200
 
     import psycopg._tz as psycopg_tz
 
