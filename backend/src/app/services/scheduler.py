@@ -27,17 +27,32 @@ class JobRunnerService:
         )
         if db.bind and db.bind.dialect.name == "postgresql":
             query = query.with_for_update(skip_locked=True)
-        resources = query.all()
+        claimed_rows = query.all()
+        if not claimed_rows:
+            return {
+                "total_checked": 0,
+                "available": 0,
+                "broken": 0,
+                "degraded": 0,
+            }
+
+        # Claim batch and release PostgreSQL locks before slow outbound HTTP probes
+        claim_time = datetime.now(timezone.utc)
+        targets = []
+        for res in claimed_rows:
+            res.last_checked_at = claim_time
+            targets.append((res.id, res.url))
+        db.commit()
+
         checked = 0
         broken = 0
         degraded = 0
         available = 0
 
-        for res in resources:
-            status, code = await check_url_availability(res.url)
-            res.availability_status = status
-            res.status_code = code
-            res.last_checked_at = datetime.now(timezone.utc)
+        probe_results = []
+        for res_id, res_url in targets:
+            status, code = await check_url_availability(res_url)
+            probe_results.append((res_id, status, code, datetime.now(timezone.utc)))
             checked += 1
             if status == AvailabilityStatus.BROKEN:
                 broken += 1
@@ -45,6 +60,19 @@ class JobRunnerService:
                 degraded += 1
             elif status == AvailabilityStatus.AVAILABLE:
                 available += 1
+
+        resources_by_id = {
+            r.id: r
+            for r in db.query(Resource)
+            .filter(Resource.id.in_([rid for rid, _, _, _ in probe_results]))
+            .all()
+        }
+        for res_id, status, code, checked_at in probe_results:
+            target = resources_by_id.get(res_id)
+            if target is not None:
+                target.availability_status = status
+                target.status_code = code
+                target.last_checked_at = checked_at
 
         db.commit()
         return {

@@ -97,7 +97,9 @@ The backend exposes `POST /api/v1/webhooks/clerk` (protected by `RL_WEBHOOKS`: `
 | **Concurrent Sessions** | Multiple permitted (1 active primary per `clerk_session_id`) | `content_admin` & `viewer`: multiple; **`tech_admin`: Single Active Session (`enforce_single_session = true`)** | Partial unique indexes in `user_sessions` |
 
 - **Tech Admin Single-Session Enforcement**: Whenever a `tech_admin` obtains a new session via `/auth/clerk/exchange` (or legacy `/auth/login`), all other active sessions for that user are revoked first, backed by partial unique index `uq_tech_single_active_session`.
-- **Rotation Grace Window (`POST /api/v1/auth/refresh`)**: Rotating a token issues a brand-new `UserSession` row and marks the old row with `grace_until = now + 30s` instead of revoking it immediately. Once `now >= grace_until`, the old token returns `401`.
+- **Rotation & Refresh Behavior**:
+  - `POST /api/v1/auth/clerk/exchange` with an existing active `clerk_session_id` issues a brand-new `UserSession` row and marks the previous row with `grace_until = now + 30s` (`SESSION_ROTATION_GRACE_SECONDS`) so concurrent tabs/requests overlap safely. Once `now >= grace_until`, the old token returns `401`.
+  - `POST /api/v1/auth/refresh` rotates the opaque `session_token` hash **in place** (immediately invalidating the prior opaque token) and rejects tokens that are already inside a rotation grace window.
 - **Clerk Deletion Outbox (`clerk_outbox`)**: When a user deletes their account (`DELETE /api/v1/auth/account`) or a `tech_admin` deletes a user (`DELETE /api/v1/admin/users/{user_id}`), if Clerk Backend API `DELETE /v1/users/{clerk_user_id}` fails transiently, a `clerk_outbox` record is enqueued and retried with exponential backoff `[60s, 300s, 900s, 3600s]` up to `max_attempts = 5` before moving to `dead_letter`.
 
 ---

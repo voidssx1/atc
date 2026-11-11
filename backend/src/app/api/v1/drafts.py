@@ -15,6 +15,7 @@ from app.schemas.draft import (
     ContentDraftUpdate,
 )
 from app.services.audit import log_audit_event
+from app.services.data_transfer import canonicalize_resource_url
 from app.services.url_checker import validate_url_format
 
 _ALLOWED_TOPIC_PUBLISH_FIELDS = (
@@ -606,6 +607,19 @@ def publish_draft(
             validated_url = _validate_publish_resource_url(p["url"])
         else:
             validated_url = None
+
+        if validated_url is not None:
+            canon_url = canonicalize_resource_url(validated_url)
+            dup_query = db.query(Resource.id, Resource.url).filter(
+                Resource.is_archived == False  # noqa: E712
+            )
+            if draft.entity_id:
+                dup_query = dup_query.filter(Resource.id != draft.entity_id)
+            if any(canonicalize_resource_url(row[1]) == canon_url for row in dup_query.all()):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An active resource with this canonical URL already exists",
+                )
 
         if draft.entity_id:
             res = (

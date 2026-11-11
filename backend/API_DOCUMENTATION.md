@@ -2,7 +2,7 @@
 
 > **Project**: ATC DSA Roadmap & Resource Hub Backend (`atc-dsa-backend`, v`0.1.0`)
 > **API Prefix**: `/api/v1`
-> **Verification Status**: All **72 OpenAPI operations** have explicit automated test coverage (`78 passed` in `pytest` using in-memory SQLite and mocked Clerk, Resend/Brevo, and Cloudflare `RateLimit` bindings). Live deployment on Cloudflare Python Workers (`*.workers.dev`), live Neon PostgreSQL execution, live Clerk JWKS/Svix webhook traffic, live Cloudflare edge rate limiting, and live Resend/Brevo email delivery are **not yet verified** against production infrastructure.
+> **Verification Status**: All **72 OpenAPI operations** have explicit automated test coverage in `pytest` (using in-memory SQLite and mocked Clerk, Resend/Brevo, and Cloudflare `RateLimit` bindings). Live on Cloudflare Python Workers (`https://atc-dsa-backend.webatc77.workers.dev`) with Neon PostgreSQL + Hyperdrive (`003_clerk_auth_policies`): `/health`, `/api/v1/docs`, `/api/v1/openapi.json`, `/api/v1/roadmap/topics`, `/api/v1/resources/`, `TECH_ADMIN` Clerk JWT exchange + `/admin/jobs/clerk-outbox` + `/dashboard/admin` + `/auth/logout`, `RL_AUTH_EXCHANGE` `429 Retry-After: 60`, `http://localhost:5173` CORS preflight, and `410`/`401`/`400` guards are live-verified. Live Student/Content Admin/Viewer flows, Resend/Brevo delivery, Clerk Dashboard webhook delivery, Cron trigger execution, and production Pages origin CORS remain pending external setup or explicit test authorization.
 
 ---
 
@@ -16,7 +16,7 @@
 | Root Health Check | `/health` | `https://atc-dsa-backend.webatc77.workers.dev/health` |
 | Versioned Health Check | `/api/v1/health` | `https://atc-dsa-backend.webatc77.workers.dev/api/v1/health` |
 
-> **CORS Note**: `DynamicCORSMiddleware` allows `allow_credentials=True`, all methods, and all headers **only** for origins explicitly listed in `ALLOWED_ORIGINS`. In `backend/wrangler.toml`, `ALLOWED_ORIGINS` currently holds the placeholder `https://REPLACE_WITH_FRONTEND_DOMAIN` and must be updated before browser calls succeed.
+> **CORS Note**: `DynamicCORSMiddleware` allows `allow_credentials=True`, all methods, and all headers **only** for origins explicitly listed in `ALLOWED_ORIGINS`. In `backend/wrangler.toml`, `ALLOWED_ORIGINS` is currently set to `http://localhost:5173` for local development and must be updated with the deployed frontend origin before production browser calls succeed.
 
 ---
 
@@ -58,17 +58,17 @@ Content-Type: application/json
 
 {"detail": "Too many requests. Please try again later."}
 ```
-> **Note**: Edge rate limiting fails closed in local/test only when a mock binding is attached, and live Cloudflare enforcement is **unverified** until deployed to `workers.dev`.
+> **Note**: Edge rate limiting fails open only if a binding raises an unexpected telemetry exception. Live Cloudflare `RL_AUTH_EXCHANGE` `429` + `Retry-After: 60` + CORS header preservation has been verified against `https://atc-dsa-backend.webatc77.workers.dev`.
 
 ### 2.3 Standard Error Responses
 
 | Status Code | Meaning | Response Body Shape |
 |---|---|---|
-| `400 Bad Request` | Business rule or payload validation error (e.g., invalid URL, invalid draft state transition, bad webhook signature, missing token) | `{"detail": "<reason>"}` |
-| `401 Unauthorized` | Missing, expired, inactive, or revoked Bearer `session_token` or invalid Clerk JWT (includes `WWW-Authenticate: Bearer` on token checks) | `{"detail": "<reason>"}` |
+| `400 Bad Request` | Business rule or payload validation error (e.g., invalid URL, invalid draft state transition, missing Svix headers/stale timestamp, self-demotion/self-deactivation, missing token) | `{"detail": "<reason>"}` |
+| `401 Unauthorized` | Missing, expired, inactive, or revoked Bearer `session_token`, invalid Clerk JWT, or invalid Svix webhook HMAC signature (includes `WWW-Authenticate: Bearer` on token checks) | `{"detail": "<reason>"}` |
 | `403 Forbidden` | Authenticated user lacks required `UserRole`, tried reading another user's profile without admin role, used non-`bennett.edu.in` student email, or requested privileged flags | `{"detail": "<reason>"}` |
 | `404 Not Found` | Requested topic, subtopic, resource, draft, user, progress record, bookmark, or outbox item does not exist (or hidden unpublished/archived item) | `{"detail": "<reason>"}` |
-| `409 Conflict` | Duplicate slug/email/username or Clerk-Neon identity linking conflict | `{"detail": "<reason>"}` |
+| `409 Conflict` | Duplicate slug/email/username, duplicate canonical active resource URL, Clerk-Neon identity linking conflict, or direct `PUT`/`DELETE` on immutable published content | `{"detail": "<reason>"}` |
 | `410 Gone` | Legacy auth endpoint disabled because `AUTH_MODE=clerk` | `{"detail": "..."}` |
 | `422 Unprocessable Entity` | FastAPI/Pydantic schema validation error (`HTTPValidationError`) | `{"detail": [{"loc": [...], "msg": "...", "type": "..."}]}` |
 | `429 Too Many Requests` | Rate limit exceeded (`RateLimitMiddleware`) | `{"detail": "Too many requests. Please try again later."}` |
@@ -116,10 +116,10 @@ Exchanges a verified Clerk session JWT (`RS256` via `CLERK_JWKS_URL` or `CLERK_J
   "session_token": "opaque_random_urlsafe_token_string",
   "access_token": "opaque_random_urlsafe_token_string",
   "token_type": "bearer",
-  "expires_in": 2592000
+  "expires_in": 604800
 }
 ```
-  - `expires_in` is `SESSION_MAX_LIFETIME_DAYS * 86400` (`2592000` seconds = 30 days) for students and `SESSION_ADMIN_INACTIVITY_MINUTES * 60` (`1800` seconds = 30 minutes) for admin roles.
+  - `expires_in` is clamped to `SESSION_INACTIVITY_DAYS * 86400` (`604800` seconds = 7 days, capped at `30 days` max lifetime) for students and `SESSION_ADMIN_INACTIVITY_MINUTES * 60` (`1800` seconds = 30 minutes) for admin roles.
 - **Errors**:
   - `401`: Missing, malformed, expired, wrong-issuer, untrusted-`azp`, or unverified Clerk JWT.
   - `403`: Student email outside `STUDENT_ALLOWED_EMAIL_DOMAIN` (`bennett.edu.in`), unverified email in Clerk claim, or local account disabled (`is_active=false`).
@@ -127,7 +127,7 @@ Exchanges a verified Clerk session JWT (`RS256` via `CLERK_JWKS_URL` or `CLERK_J
   - `429`: Rate limit exceeded.
 
 #### 4. `POST /api/v1/auth/refresh` *(Rate Limited: `RL_AUTH_REFRESH`)*
-Rotates an active opaque session token. Issues a new `session_token` / `access_token` while keeping the previous token valid only for a `SESSION_ROTATION_GRACE_SECONDS` (`30s`) grace window (`grace_until`) to handle concurrent in-flight tabs/requests.
+Rotates an active opaque session token **in place** (immediately invalidating the supplied token and extending inactivity expiry within the 30-day maximum lifetime). Note: only repeated `POST /api/v1/auth/clerk/exchange` calls sharing the same `clerk_session_id` preserve the prior token for the `SESSION_ROTATION_GRACE_SECONDS` (`30s`) grace window.
 - **Auth**: Public (uses opaque token in body)
 - **Request Body** (`SessionTokenRequest` — accepts either `session_token` or `refresh_token`):
 ```json
@@ -237,7 +237,8 @@ Receives Clerk lifecycle webhooks verified with Svix HMAC-SHA256 headers (`svix-
 {"status": "duplicate_ignored", "svix_id": "msg_2abc123"}
 ```
 - **Errors**:
-  - `400`: Missing/invalid Svix headers, invalid signature, replay timestamp out of tolerance, or invalid JSON event structure.
+  - `400`: Missing Svix headers, stale/invalid `svix-timestamp` (>300s skew), or invalid JSON event structure.
+  - `401`: Invalid Svix HMAC webhook signature.
   - `429`: Rate limit exceeded.
   - `500`: `CLERK_WEBHOOK_SECRET` not configured on the Worker/environment.
 
@@ -817,11 +818,11 @@ Alias endpoint sharing the same handler and behavior as `POST /api/v1/analytics/
 - **Errors**: `404`, `422`, `429`.
 
 #### 60. `GET /api/v1/analytics/resources`
-Returns aggregated click counts and unique student clickers sorted by popularity (`total_clicks` desc).
+Returns aggregated click counts and unique student clickers across non-archived resources ordered by `Resource.order_index` ascending.
 - **Auth**: `tech_admin`, `content_admin`, `viewer`
-- **Query Param**: `limit` (`integer 1..100`, default `50`)
+- **Query Params**: `start_date` (`datetime | null`), `end_date` (`datetime | null`, max range `365` days), `limit` (`integer 1..100`, default `50`)
 - **Response `200 OK`**: `ResourceAnalyticsSummary[]`
-- **Errors**: `401`, `403`, `422`.
+- **Errors**: `400` (`start_date > end_date` or span > 365 days), `401`, `403`, `422`.
 
 #### 61. `GET /api/v1/admin/audit-logs`
 Lists immutable administrative audit log entries ordered newest first.
@@ -852,7 +853,7 @@ Deletes stale revoked/expired `user_sessions` rows.
 Processes due `pending` `clerk_outbox` remote deletion jobs against Clerk Backend API.
 - **Auth**: `tech_admin`
 - **Query Param**: `limit` (`integer 1..100`, default `25`)
-- **Response `200 OK`**: `{"message": "Clerk outbox processed", "results": {"processed": ..., "completed": ..., "requeued": ..., "dead_lettered": ...}}`
+- **Response `200 OK`**: `{"message": "Clerk outbox processed", "results": {"processed": ..., "completed": ..., "rescheduled": ..., "dead_letter": ..., "purged": ...}}`
 - **Errors**: `401`, `403`, `422`.
 
 #### 65. `GET /api/v1/admin/jobs/clerk-outbox`
@@ -894,7 +895,7 @@ Exports the complete topic and nested subtopic hierarchy as JSON.
 - **Errors**: `401`, `403`.
 
 #### 69. `GET /api/v1/admin/data/export/roadmap/csv`
-Exports roadmap structure as a downloadable `text/csv` attachment (`Content-Disposition: attachment; filename="roadmap_export.csv"`).
+Exports roadmap structure as a downloadable `text/csv` attachment (`Content-Disposition: attachment; filename=roadmap.csv`).
 - **Auth**: `tech_admin`, `content_admin`, `viewer`
 - **Response `200 OK`**: `text/csv` stream
 - **Errors**: `401`, `403`.

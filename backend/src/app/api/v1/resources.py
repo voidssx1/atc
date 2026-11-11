@@ -21,6 +21,7 @@ from app.schemas.resource import (
     ResourceUpdate,
 )
 from app.services.audit import log_audit_event
+from app.services.data_transfer import canonicalize_resource_url
 from app.services.url_checker import check_url_availability, validate_url_format
 
 router = APIRouter(prefix="/resources", tags=["Resources"])
@@ -128,6 +129,14 @@ async def create_resource(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid URL format. Must begin with http:// or https:// and have a valid domain.",
+        )
+
+    canon_url = canonicalize_resource_url(url_clean)
+    existing_urls = db.query(Resource.url).filter(Resource.is_archived == False).all()  # noqa: E712
+    if any(canonicalize_resource_url(row[0]) == canon_url for row in existing_urls):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An active resource with this canonical URL already exists",
         )
 
     if payload.subtopic_id:

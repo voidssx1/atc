@@ -544,7 +544,13 @@ def delete_subtopic(
         Depends(require_role([UserRole.TECH_ADMIN, UserRole.CONTENT_ADMIN]))
     ],
 )
-def bulk_reorder(payload: BulkReorderRequest, db: Session = Depends(get_db)):
+def bulk_reorder(
+    payload: BulkReorderRequest,
+    current_admin: User = Depends(
+        require_role([UserRole.TECH_ADMIN, UserRole.CONTENT_ADMIN])
+    ),
+    db: Session = Depends(get_db),
+):
     if payload.entity_type == "topic":
         model = RoadmapTopic
     elif payload.entity_type == "subtopic":
@@ -560,5 +566,13 @@ def bulk_reorder(payload: BulkReorderRequest, db: Session = Depends(get_db)):
             {"order_index": item.order_index}
         )
     db.commit()
+
+    log_audit_event(
+        db=db,
+        action="roadmap_reordered",
+        user_id=current_admin.id,
+        target_type=payload.entity_type,
+        details={"count": len(payload.items)},
+    )
 
     return {"message": f"Successfully reordered {len(payload.items)} items"}

@@ -155,6 +155,11 @@ def update_user_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+    if user.id == current_admin.id and payload.role != UserRole.TECH_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove your own tech_admin role",
+        )
 
     old_role = user.role.value
     role_changed = payload.role != user.role
@@ -196,6 +201,11 @@ def update_user_status(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    if user.id == current_admin.id and not payload.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate your own admin account",
         )
 
     user.is_active = payload.is_active

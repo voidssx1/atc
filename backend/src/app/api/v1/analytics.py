@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_optional_current_user, require_role
@@ -52,9 +53,33 @@ def track_resource_click(
     ],
 )
 def get_resource_analytics_summary(
+    start_date: Optional[datetime] = Query(default=None),
+    end_date: Optional[datetime] = Query(default=None),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    if start_date is not None and start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date is not None and end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    if start_date is not None and end_date is not None:
+        if start_date > end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_date must be before or equal to end_date",
+            )
+        if (end_date - start_date) > timedelta(days=365):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Date range cannot exceed 365 days",
+            )
+
+    join_conditions = [ResourceAnalytics.resource_id == Resource.id]
+    if start_date is not None:
+        join_conditions.append(ResourceAnalytics.created_at >= start_date)
+    if end_date is not None:
+        join_conditions.append(ResourceAnalytics.created_at <= end_date)
+
     rows = (
         db.query(
             Resource.id,
@@ -66,7 +91,7 @@ def get_resource_analytics_summary(
             ),
         )
         .outerjoin(
-            ResourceAnalytics, ResourceAnalytics.resource_id == Resource.id
+            ResourceAnalytics, and_(*join_conditions)
         )
         .filter(Resource.is_archived == False)  # noqa: E712
         .group_by(

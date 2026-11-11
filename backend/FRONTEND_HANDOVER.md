@@ -75,7 +75,7 @@ export interface BackendTokenResponse {
   session_token: string;
   access_token: string;
   token_type: "bearer";
-  expires_in: number; // 2592000s (30d) for students; 1800s (30m) for admins
+  expires_in: number; // 604800s (7d) inactivity for students; 1800s (30m) for admins
 }
 
 export async function exchangeClerkJwt(clerkJwt: string): Promise<BackendTokenResponse> {
@@ -102,7 +102,7 @@ Backend sessions enforce:
 - **Students**: `30 days` max lifetime, `7 days` sliding inactivity timeout.
 - **Admins (`tech_admin`, `content_admin`, `viewer`)**: `30 days` max lifetime, `30 minutes` sliding inactivity timeout.
 - **Tech Admin Single-Session Policy**: Logging in elsewhere revokes prior `tech_admin` sessions immediately.
-- **Rotation Grace Window**: Calling `POST /api/v1/auth/refresh` mints a **new** `session_token` and keeps the previous token valid for **`30 seconds`** (`SESSION_ROTATION_GRACE_SECONDS`) so concurrent in-flight API requests do not fail immediately with `401`.
+- **Rotation Grace Window**: Calling `POST /api/v1/auth/refresh` rolls `session_token` **in place** (immediately replacing the prior token hash). By contrast, repeated `POST /api/v1/auth/clerk/exchange` calls sharing the same `clerk_session_id` issue a new token row while keeping the prior row valid for **`30 seconds`** (`SESSION_ROTATION_GRACE_SECONDS`) so concurrent in-flight API requests during Clerk exchange do not fail immediately with `401`.
 
 ```typescript
 let inFlightRefresh: Promise<string> | null = null;
