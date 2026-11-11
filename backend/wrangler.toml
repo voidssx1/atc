@@ -11,9 +11,13 @@
 #        npx wrangler secret put CLERK_SECRET_KEY
 #        npx wrangler secret put CLERK_WEBHOOK_SECRET
 name = "atc-dsa-backend"
-main = "worker.py"
+main = "src/worker.py"
 compatibility_date = "2026-09-08"
 compatibility_flags = ["python_workers"]
+
+# Exclude bytecode, build-time C sources/headers, and type stubs from vendored `python_modules/`
+[python_modules]
+exclude = ["**/*.pyc", "**/__pycache__/**", "**/*.c", "**/*.h", "**/*.pyi"]
 
 # Cloudflare Hyperdrive binding for low-latency connection pooling to Neon PostgreSQL
 [[hyperdrive]]

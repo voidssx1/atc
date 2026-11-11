@@ -5,7 +5,8 @@ from typing import Annotated, Any, Iterator, List, Optional
 from pydantic import BeforeValidator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_BASE_DIR = Path(__file__).resolve().parent.parent.parent
+_PKG_ROOT = Path(__file__).resolve().parent.parent.parent
+_BASE_DIR = _PKG_ROOT.parent if _PKG_ROOT.name == "src" else _PKG_ROOT
 _ENV_FILE = _BASE_DIR / ".env"
 
 

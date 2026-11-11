@@ -8,7 +8,7 @@ on:
     paths:
       - "backend/pyproject.toml"
       - "backend/wrangler.toml"
-      - "backend/worker.py"
+      - "backend/src/**"
       - ".github/workflows/temp-pywrangler-package-check.yml"
 
 jobs:
@@ -62,7 +62,14 @@ jobs:
       - name: Measure Worker bundle size (dry-run only, no deploy)
         working-directory: backend
         run: |
-          npx --yes wrangler deploy --dry-run
+          DRY_OUT=$(npx --yes wrangler deploy --dry-run 2>&1 | tee /dev/stderr)
+          PM_SIZE=$(du -sh python_modules 2>/dev/null | cut -f1 || echo "none")
+          VW_SIZE=$(du -sh .venv-workers 2>/dev/null | cut -f1 || echo "none")
+          UPLOAD_LINE=$(echo "$DRY_OUT" | grep -E "Total Upload:" | tail -n1 || echo "none")
+          TOTAL_LINE=$(echo "$DRY_OUT" | grep -E "Total \([0-9]+ modules?\)" | tail -n1 || echo "none")
+          VENDOR_LINE=$(echo "$DRY_OUT" | grep -E "Vendored Modules" | tail -n1 || echo "none")
+          HAS_VENV=$(echo "$DRY_OUT" | grep -q "\.venv-workers" && echo "YES" || echo "NO")
+          echo "::notice title=Bundle Metrics::python_modules=$PM_SIZE | .venv-workers=$VW_SIZE | has_venv_in_bundle=$HAS_VENV | $VENDOR_LINE | $TOTAL_LINE | $UPLOAD_LINE"
 
       - name: Upload packaged artifacts for inspection
         if: always()
