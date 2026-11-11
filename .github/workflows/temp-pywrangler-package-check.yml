@@ -1,0 +1,77 @@
+name: Temporary Backend Python Packaging Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - Backend
+    paths:
+      - "backend/pyproject.toml"
+      - "backend/wrangler.toml"
+      - "backend/worker.py"
+      - ".github/workflows/temp-pywrangler-package-check.yml"
+
+jobs:
+  pywrangler-package-check:
+    name: Verify Cloudflare Python Worker Packaging (No Deploy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Backend branch
+        uses: actions/checkout@v4
+        with:
+          ref: Backend
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install uv (>= 0.13.4)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Verify toolchain versions
+        run: |
+          python --version
+          node -v
+          uv --version
+          python -c "import subprocess, re, sys; out = subprocess.check_output(['uv', '--version'], text=True); m = re.search(r'(\d+\.\d+\.\d+)', out); ver = tuple(int(x) for x in m.group(1).split('.')); assert ver >= (0, 13, 4), f'uv >= 0.13.4 required, got {out}'; print('uv version OK:', m.group(1))"
+
+      - name: Run pywrangler sync inside backend
+        working-directory: backend
+        run: |
+          uvx --from workers-py pywrangler sync
+
+      - name: Inspect generated packaging artifacts
+        if: always()
+        working-directory: backend
+        run: |
+          echo "=== backend directory ==="
+          ls -la
+          echo "=== generated vendor / module sizes ==="
+          du -sh python_modules .venv-workers 2>/dev/null || true
+          ls -la python_modules 2>/dev/null || true
+
+      - name: Measure Worker bundle size (dry-run only, no deploy)
+        working-directory: backend
+        run: |
+          npx --yes wrangler deploy --dry-run
+
+      - name: Upload packaged artifacts for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-python-worker-package
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            backend/python_modules
+            backend/pylock.toml
+            backend/uv.lock

@@ -1,0 +1,220 @@
+# Deployment & Operations Guide
+
+This guide covers configuring Neon PostgreSQL, Cloudflare Hyperdrive, Cloudflare Secrets & Variables, Clerk webhooks, Resend/Brevo email delivery, Cloudflare Workers Rate Limiting / optional Zone WAF rules, Python Workers deployment (`pywrangler`), smoke testing, and rollback procedures for `atc-dsa-backend`.
+
+> **Current Verification Boundary**:
+> - **Verified Locally**: `python -m compileall -q app tests` (exit `0`), `python -m pytest -v --tb=short` (`78 passed` on SQLite with mocked external APIs & mocked `RateLimit` bindings), and `npx --yes wrangler deploy --dry-run` (exit `0`, bound `HYPERDRIVE` + `RL_AUTH_EXCHANGE`, `RL_AUTH_REFRESH`, `RL_ANALYTICS`, `RL_WEBHOOKS`).
+> - **Not Yet Verified in Production**: Live Neon Migration `003` application, `pywrangler sync` / `pywrangler deploy` packaging, live `*.workers.dev` HTTP/Cron execution, live Hyperdrive connectivity, live Clerk JWT/Svix webhooks, live Cloudflare edge rate limiting, and live Resend/Brevo email sends.
+
+---
+
+## 1. Pre-Deployment Checklist & Configuration
+
+### 1.1 Secrets vs. `wrangler.toml` Variables
+
+Never commit real secrets into git or `backend/wrangler.toml`. Configure secrets in Cloudflare using Wrangler and keep non-secret config in `backend/wrangler.toml` `[vars]`.
+
+#### Required Cloudflare Secrets (`wrangler secret put <NAME>`)
+
+| Secret Name | Purpose | Status Notes |
+|---|---|---|
+| `SECRET_KEY` | Cryptographic backend secret (`>= 32` chars) | Uploaded on Cloudflare account |
+| `CLERK_SECRET_KEY` | Clerk Backend API calls (user email fallback lookup & remote deletion) | Uploaded on Cloudflare account |
+| `CLERK_WEBHOOK_SECRET` | Svix signing secret (`whsec_...`) for `POST /api/v1/webhooks/clerk` | **Must be uploaded before production HTTP traffic** (`validate_production_clerk_config` fails with HTTP `500` if missing in `ENVIRONMENT=production`, `AUTH_MODE=clerk`) |
+| `RESEND_API_KEY` | Primary HTTP transactional email provider (`https://api.resend.com/emails`) | Upload at least one of `RESEND_API_KEY` or `BREVO_API_KEY` |
+| `BREVO_API_KEY` | Fallback HTTP transactional email provider (`https://api.brevo.com/v3/smtp/email`) | Recommended as automatic failover on ambiguous/timeout/retryable Resend failures |
+
+#### Variables in `backend/wrangler.toml` `[vars]`
+
+| Variable | Current Value in `wrangler.toml` | Action Required Before Frontend Cutover |
+|---|---|---|
+| `ENVIRONMENT` | `"production"` | Keep as-is |
+| `AUTH_MODE` | `"clerk"` | Keep as-is |
+| `PROJECT_NAME` | `"ATC DSA Roadmap & Resource Hub"` | Keep as-is |
+| `API_V1_STR` | `"/api/v1"` | Keep as-is |
+| `STUDENT_ALLOWED_EMAIL_DOMAIN` | `"bennett.edu.in"` | Keep as-is |
+| `EMAILS_FROM_EMAIL` | `"noreply@bennett.edu.in"` | Ensure sender/domain is verified in Resend/Brevo (or change to a verified domain) |
+| `EMAILS_FROM_NAME` | `"ATC DSA Roadmap Hub"` | Keep as-is |
+| `CLOUDFLARE_ORIGIN_URL` | `"https://atc-dsa-backend.webatc77.workers.dev"` | Set for `*.workers.dev` |
+| `CLERK_JWKS_URL` | `"https://great-bug-2878.clerk.accounts.dev/.well-known/jwks.json"` | Configured for Clerk dev instance |
+| `CLERK_ISSUER` | `"https://great-bug-2878.clerk.accounts.dev"` | Configured for Clerk dev instance |
+| `ALLOWED_ORIGINS` | `"https://REPLACE_WITH_FRONTEND_DOMAIN"` | **Replace** with real frontend origin(s) before browser requests (and before expecting non-`500` startup checks if needed) |
+| `CLERK_ALLOWED_ORIGINS` | `"https://REPLACE_WITH_FRONTEND_DOMAIN"` | **Replace** with exact frontend origin(s) matching Clerk JWT `azp` claim (`validate_production_clerk_config` rejects `REPLACE_WITH_*` with HTTP `500`) |
+
+---
+
+## 2. Database Setup: Neon PostgreSQL & Hyperdrive
+
+### 2.1 Hyperdrive Binding (`backend/wrangler.toml`)
+
+Hyperdrive is already configured in `backend/wrangler.toml`:
+```toml
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "34e6e006848f46c4b75e382dbfafd02a"
+```
+- The Cloudflare Hyperdrive config must point to your **Neon pooled or direct PostgreSQL connection string** via Cloudflare Dashboard / `wrangler hyperdrive update` (do not place DB credentials in `wrangler.toml`).
+- Note that Workers Free plan supports up to `100,000` Hyperdrive queries/day.
+
+### 2.2 Run Alembic Migrations Against Neon (Direct Connection)
+
+Always run Alembic migrations against the **direct (non-pooled)** Neon connection string (`DATABASE_URL`), **not** via Hyperdrive or PgBouncer transaction pooling, to prevent DDL lock/prepared-statement issues:
+
+```powershell
+cd P:\CLUB\Algohub\atc\backend
+$env:DATABASE_URL = "postgresql+psycopg://<USER>:<PASSWORD>@<NEON_DIRECT_HOST>/<DB>?sslmode=require"
+python -m alembic current
+python -m alembic upgrade head
+python -m alembic current
+```
+Verify revision reaches `003_clerk_auth_policies (head)`.
+
+---
+
+## 3. Clerk Webhook & Email Sender Verification
+
+### 3.1 Clerk Webhook Setup (`POST /api/v1/webhooks/clerk`)
+
+1. Open **Clerk Dashboard -> Webhooks -> Add Endpoint**.
+2. Set Endpoint URL:
+   ```text
+   https://atc-dsa-backend.webatc77.workers.dev/api/v1/webhooks/clerk
+   ```
+3. Subscribe to events:
+   - `user.updated`
+   - `user.deleted`
+   - `session.revoked`
+   - *(Optional, logged as non-revoking)* `session.ended`, `session.removed`
+4. Copy the Svix **Signing Secret** (`whsec_...`) and upload it to Cloudflare Workers:
+   ```powershell
+   cd P:\CLUB\Algohub\atc\backend
+   npx wrangler secret put CLERK_WEBHOOK_SECRET
+   ```
+
+### 3.2 Email Provider Verification (Resend & Brevo)
+
+- The backend calls **Resend** first (`https://api.resend.com/emails`) and falls back to **Brevo** (`https://api.brevo.com/v3/smtp/email`) on retryable HTTP/network failures (skipping Brevo fallback on Resend ambiguous `ReadTimeout` to avoid duplicate emails).
+- Before sending transactional/test emails, verify the sender domain/address matching `EMAILS_FROM_EMAIL` (`noreply@bennett.edu.in`) in Resend (SPF/DKIM DNS records) and Brevo, or update `EMAILS_FROM_EMAIL` in `wrangler.toml` to a domain you control DNS for.
+- Upload API keys without printing them:
+  ```powershell
+  npx wrangler secret put RESEND_API_KEY
+  npx wrangler secret put BREVO_API_KEY
+  ```
+- Test delivery as a `tech_admin` using `POST /api/v1/admin/jobs/test-email` after deployment.
+
+---
+
+## 4. Rate Limiting & Optional Zone WAF Configuration
+
+> **Important Honesty Note**: Having `[[ratelimits]]` configured in `backend/wrangler.toml` does **not** activate live edge enforcement until the Worker is deployed. Furthermore, custom Cloudflare Zone WAF rules are **not** available on the shared `*.workers.dev` subdomain.
+
+### 4.1 Workers Rate Limiting Bindings (`wrangler.toml`)
+
+Configured bindings enforced by `RateLimitMiddleware` (`app/core/rate_limit.py`) using `CF-Connecting-IP`:
+
+| Binding | Namespace ID | Threshold | Protected Route(s) |
+|---|---|---|---|
+| `RL_AUTH_EXCHANGE` | `1001` | `10` req / `60s` | `POST /api/v1/auth/clerk/exchange` |
+| `RL_AUTH_REFRESH` | `1002` | `20` req / `60s` | `POST /api/v1/auth/refresh` |
+| `RL_ANALYTICS` | `1003` | `60` req / `60s` | `POST /api/v1/analytics/click`, `POST /api/v1/analytics/event` |
+| `RL_WEBHOOKS` | `1004` | `100` req / `60s` | `POST /api/v1/webhooks/clerk` |
+
+### 4.2 Optional Cloudflare Dashboard WAF Rate Limiting (Custom Domain Only)
+
+If you attach a custom Cloudflare-proxied domain route (e.g. `api.yourdomain.com/*`) later, you can add edge WAF Rate Limiting rules on the Cloudflare Free plan (**1 free rule**, 10-second period only; edge path filtering only):
+1. Open **Cloudflare Dashboard -> `<Your Zone>` -> Security -> WAF -> Rate limiting rules -> Create rule**.
+2. Recommended rule expressions & free-plan 10-second thresholds:
+   - `(http.request.uri.path eq "/api/v1/auth/clerk/exchange" and http.request.method eq "POST")` -> `5` requests / `10` seconds per IP -> **Block** (`10s`).
+   - Or combine high-risk auth/analytics paths into your 1 Free-plan WAF rule while keeping per-endpoint `60s` limits in the Worker's `[[ratelimits]]` bindings.
+
+---
+
+## 5. Deploying Python Workers (`pywrangler` via WSL2 / Linux)
+
+Cloudflare Python Workers use `pywrangler` (`workers-py`) to bundle Python dependencies into the Worker bundle. On Windows, run `pywrangler` inside **WSL2 (Ubuntu/Linux)** (or Linux CI):
+
+```bash
+# Inside WSL2 / Linux terminal
+cd /mnt/p/CLUB/Algohub/atc/backend
+
+# Create/activate virtualenv with workers dependency group if not already installed
+python3 -m venv .venv-wsl
+source .venv-wsl/bin/activate
+pip install --upgrade pip
+pip install workers-py
+
+# Optional dry-run packaging check
+npx wrangler deploy --dry-run
+
+# Sync Python packages and deploy to Cloudflare Workers
+pywrangler sync
+pywrangler deploy
+```
+
+### Cron Triggers Configured in `wrangler.toml`
+
+Once deployed, Cloudflare Cron Triggers invoke `Default.scheduled()` in `worker.py` -> `app/main.py`:
+- **`0 1-23 * * *` (Hourly)**: Runs `cleanup_expired_sessions` + `ClerkOutboxService.process_pending(limit=25)`.
+- **`0 0 * * *` (Daily Midnight UTC)**: Runs session cleanup + Clerk outbox retries + `run_resource_availability_scan(limit=20)`.
+
+---
+
+## 6. Post-Deploy Smoke Tests
+
+Run these checks after replacing placeholders (`ALLOWED_ORIGINS`, `CLERK_ALLOWED_ORIGINS`), uploading secrets, running `alembic upgrade head`, and deploying via `pywrangler deploy`:
+
+```powershell
+# 1. Health check (verify status="ok" and auth_mode="clerk")
+Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/health"
+
+# 2. Versioned health & OpenAPI schema check
+Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/openapi.json" | Select-Object -ExpandProperty info
+
+# 3. Public roadmap read (must return ONLY published items)
+Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/roadmap/topics"
+
+# 4. Legacy endpoint check (must return HTTP 410 Gone)
+try {
+  Invoke-RestMethod -Method Post -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/auth/login" -ContentType "application/json" -Body '{"email":"test@bennett.edu.in","password":"password123"}'
+} catch {
+  $_.Exception.Response.StatusCode.value__
+}
+
+# 5. Unauthorized admin guard check (must return HTTP 401)
+try {
+  Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/dashboard/admin"
+} catch {
+  $_.Exception.Response.StatusCode.value__
+}
+```
+
+Manual checks requiring live credentials / browser:
+- Exchange a live Clerk JWT from your frontend domain (`ALLOWED_ORIGINS` / `CLERK_ALLOWED_ORIGINS`) -> verify `200 Token` response and CORS `Access-Control-Allow-Origin` header.
+- Verify Clerk webhook delivery (`200 processed`) in **Clerk Dashboard -> Webhooks -> Logs**.
+- Trigger `POST /api/v1/admin/jobs/test-email` as `tech_admin` -> verify Resend/Brevo email arrives.
+- Verify `429 Too Many Requests` (`Retry-After: 60`) after exceeding `10` rapid `POST /api/v1/auth/clerk/exchange` calls from one IP.
+
+---
+
+## 7. Rollback Instructions
+
+### 7.1 Worker Code / Configuration Rollback
+
+```powershell
+cd P:\CLUB\Algohub\atc\backend
+npx wrangler deployments list
+npx wrangler rollback <DEPLOYMENT_VERSION_ID>
+```
+
+### 7.2 Database Schema Rollback (`003_clerk_auth_policies` -> `002_profile_analytics`)
+
+Migration `003` makes `users.hashed_password` nullable to support Clerk-only users. **`alembic downgrade 002_profile_analytics` intentionally fails** if any row in `users` still has `hashed_password IS NULL`:
+
+1. Ensure no live Worker instance is writing Clerk-only rows (`AUTH_MODE=legacy` or maintenance window / rollback Worker first).
+2. Inspect and handle any users with `hashed_password IS NULL` using an approved recovery script/notification process (do not invent weak static passwords).
+3. Once `SELECT COUNT(*) FROM users WHERE hashed_password IS NULL` equals `0`, downgrade via direct Neon `DATABASE_URL`:
+   ```powershell
+   cd P:\CLUB\Algohub\atc\backend
+   $env:DATABASE_URL = "postgresql+psycopg://<USER>:<PASSWORD>@<NEON_DIRECT_HOST>/<DB>?sslmode=require"
+   python -m alembic downgrade 002_profile_analytics
+   ```
