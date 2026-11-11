@@ -282,9 +282,10 @@ def test_app_startup_defers_openapi_and_middleware_while_keeping_psycopg_utc_see
     )
 
     probe = (
-        "import app.main as m, app.core.config as cfg, app.db.session as sess; "
+        "import sys, app.main as m, app.core.config as cfg, app.db.session as sess; "
         "assert m.app.openapi_schema is None, 'openapi_schema eagerly built at startup'; "
         "assert m.app.middleware_stack is None, 'middleware_stack eagerly built at startup'; "
+        "assert 'app._openapi_snapshot' not in sys.modules, 'openapi snapshot loaded eagerly'; "
         "assert len(cfg._STATIC_SETTINGS_CACHE) == 0; "
         "assert len(sess._engines) == 0"
     )
@@ -309,5 +310,109 @@ def test_app_startup_defers_openapi_and_middleware_while_keeping_psycopg_utc_see
 
     import psycopg._tz as psycopg_tz
 
-    assert psycopg_tz._timezones.get(b"UTC") is timezone.utc
-    assert psycopg_tz._timezones.get(None) is timezone.utc
+    for alias in (None, b"", b"UTC", b"utc", b"Etc/UTC", b"GMT", b"Etc/GMT", b"Z"):
+        assert psycopg_tz._timezones.get(alias) is timezone.utc
+
+
+def test_psycopg_timezone_empty_and_utc_aliases_avoid_zoneinfo_warning(caplog):
+    """Empty/UTC parameter_status aliases must resolve via _timezones without ZoneInfo errors."""
+    import logging
+    import psycopg._tz as psycopg_tz
+
+    class _FakePGConn:
+        def __init__(self, value):
+            self._value = value
+
+        def parameter_status(self, key: bytes):
+            assert key == b"TimeZone"
+            return self._value
+
+    with caplog.at_level(logging.WARNING, logger="psycopg"):
+        for raw_tz in (None, b"", b"UTC", b"utc", b"Etc/UTC", b"GMT", b"Etc/GMT", b"Z"):
+            assert psycopg_tz.get_tzinfo(_FakePGConn(raw_tz)) is timezone.utc
+
+    assert "unknown PostgreSQL timezone" not in caplog.text
+
+
+def test_postgresql_engine_disables_native_hstore_for_cold_connect():
+    """PostgreSQL engines skip unnecessary pg_type hstore introspection on cold connect."""
+    from sqlalchemy.pool import NullPool
+
+    eng = db_session_mod.get_engine(
+        "postgresql+psycopg://u:p@localhost:5432/hstore_skip_test"
+    )
+    assert isinstance(eng.pool, NullPool)
+    assert eng.dialect.use_native_hstore is False
+
+
+def test_openapi_lazy_snapshot_matches_live_schema_and_falls_back_on_route_change():
+    """Pre-compressed OpenAPI snapshot must match get_openapi() and fall back when routes change."""
+    from fastapi.openapi.utils import get_openapi
+
+    app.openapi_schema = None
+    app._openapi_routes_version = None
+    snapshot_spec = app.openapi()
+    live_spec = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        summary=app.summary,
+        description=app.description,
+        terms_of_service=app.terms_of_service,
+        contact=app.contact,
+        license_info=app.license_info,
+        routes=app.routes,
+        webhooks=app.webhooks.routes,
+        tags=app.openapi_tags,
+        servers=app.servers,
+        separate_input_output_schemas=app.separate_input_output_schemas,
+        external_docs=app.openapi_external_docs,
+    )
+    assert snapshot_spec == live_spec
+
+    # Dynamically adding a route must bypass snapshot and fall back cleanly to get_openapi()
+    orig_routes = list(app.router.routes)
+    try:
+        @app.get("/_temp_openapi_fallback_probe")
+        def _temp_probe():
+            return {"ok": True}
+
+        rebuilt = app.openapi()
+        assert "/_temp_openapi_fallback_probe" in rebuilt["paths"]
+    finally:
+        app.router.routes[:] = orig_routes
+        app.openapi_schema = None
+        app._openapi_routes_version = None
+
+
+def test_prefix_guarded_routers_skip_unrelated_subrouters():
+    """Prefix-guarded sub-routers must not compile unrelated route groups on cold requests."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    backend_src = str(Path(__file__).resolve().parent.parent / "src")
+    script = "\n".join(
+        [
+            "import json, sys",
+            f"sys.path.insert(0, {backend_src!r})",
+            "from fastapi.testclient import TestClient",
+            "import app.main as m",
+            "with TestClient(m.app) as c:",
+            "    assert c.get('/api/v1/health').status_code == 200",
+            "    assert c.get('/health').status_code == 200",
+            "states = {str(r._allowed_prefixes): r._effective_candidates_version for r in m.app.router.routes if isinstance(r, m._PrefixGuardedIncludedRouter)}",
+            "print(json.dumps(states))",
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    states = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert states.get("('/api/v1/health',)") is not None
+    assert states.get("('/api/v1/auth',)") is None
+    assert states.get("('/api/v1/admin/data',)") is None

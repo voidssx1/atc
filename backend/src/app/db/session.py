@@ -18,6 +18,17 @@ from app.core.config import (
     parse_database_url,
 )
 
+def _seed_psycopg_utc_timezones(tz_module: Any) -> None:
+    """
+    Pre-populate UTC aliases (including empty parameter_status b"") so Pyodide
+    isolates without system tzdata avoid ZoneInfo("UTC") lookup failures and warning logs.
+    """
+    tz_map = getattr(tz_module, "_timezones", None)
+    if isinstance(tz_map, dict):
+        for alias in (None, b"", b"UTC", b"utc", b"Etc/UTC", b"GMT", b"Etc/GMT", b"Z"):
+            tz_map.setdefault(alias, timezone.utc)
+
+
 # Pre-import PostgreSQL driver & dialect at module load so Cloudflare Python Workers
 # includes their initialization inside the deploy-time WASM memory snapshot instead of
 # hitting request CPU limits on the first DB request.
@@ -26,11 +37,7 @@ try:
     import psycopg._tz as _psycopg_tz  # noqa: F401
     import sqlalchemy.dialects.postgresql.psycopg  # noqa: F401
 
-    # Seed UTC timezone directly so Pyodide isolates without system tzdata avoid
-    # first-connection ZoneInfo("UTC") misses and repeated warning logs.
-    if hasattr(_psycopg_tz, "_timezones") and isinstance(_psycopg_tz._timezones, dict):
-        _psycopg_tz._timezones.setdefault(b"UTC", timezone.utc)
-        _psycopg_tz._timezones.setdefault(None, timezone.utc)
+    _seed_psycopg_utc_timezones(_psycopg_tz)
 except ImportError:
     pass
 
@@ -80,9 +87,13 @@ def _create_engine_for_url(db_url: str) -> Engine:
             normalized_url,
             connect_args={"check_same_thread": False},
         )
+    kwargs: Dict[str, Any] = {"poolclass": NullPool}
+    if make_url(normalized_url).drivername.startswith("postgresql"):
+        # Skip cold pg_type hstore introspection query on first Worker connect
+        kwargs["use_native_hstore"] = False
     engine = create_engine(
         normalized_url,
-        poolclass=NullPool,
+        **kwargs,
     )
     _install_request_dsn_hook(engine)
     return engine
