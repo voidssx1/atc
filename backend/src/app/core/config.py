@@ -149,13 +149,16 @@ def get_settings() -> Settings:
     return _request_settings_ctx.get() or settings
 
 
+_SETTING_FIELD_NAMES = tuple(Settings.model_fields.keys())
+_STATIC_SETTINGS_CACHE: dict[tuple[Any, ...], Settings] = {}
+_MAX_STATIC_SETTINGS_CACHE = 32
+
+
 def _extract_env_value(env: Any, key: str) -> Any:
     if isinstance(env, dict):
-        return env.get(key)
-    try:
-        val = getattr(env, key)
-    except AttributeError:
-        return None
+        val = env.get(key)
+    else:
+        val = getattr(env, key, None)
     if isinstance(val, (str, int, float, bool)):
         return val
     return None
@@ -185,6 +188,27 @@ def extract_hyperdrive_url(env: Any) -> Optional[str]:
     return None
 
 
+def _get_or_build_static_settings(
+    source: Settings, static_overrides: dict[str, Any]
+) -> Settings:
+    """Cache validated non-volatile Settings snapshots keyed by base + static env values."""
+    base_values = tuple(getattr(source, k) for k in _SETTING_FIELD_NAMES)
+    override_key = tuple(sorted(static_overrides.items()))
+    cache_key = (base_values, override_key)
+
+    cached = _STATIC_SETTINGS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    merged = dict(zip(_SETTING_FIELD_NAMES, base_values))
+    merged.update(static_overrides)
+    built = Settings(_env_file=None, **merged)
+    if len(_STATIC_SETTINGS_CACHE) >= _MAX_STATIC_SETTINGS_CACHE:
+        _STATIC_SETTINGS_CACHE.clear()
+    _STATIC_SETTINGS_CACHE[cache_key] = built
+    return built
+
+
 def build_settings_from_worker_env(
     env: Any, base: Optional[Settings] = None
 ) -> Settings:
@@ -193,19 +217,27 @@ def build_settings_from_worker_env(
     Worker `env` bindings without mutating the shared global `settings` object.
     """
     source = base or settings
-    merged = source.model_dump()
-
-    for field_name in Settings.model_fields:
-        val = _extract_env_value(env, field_name)
-        if val is not None:
-            merged[field_name] = val
+    if env is None:
+        return source
 
     hd_url = extract_hyperdrive_url(env)
-    if hd_url:
-        merged["HYPERDRIVE_DATABASE_URL"] = hd_url
-        merged["DATABASE_URL"] = hd_url
+    static_overrides: dict[str, Any] = {}
+    for field_name in _SETTING_FIELD_NAMES:
+        if hd_url and field_name in ("DATABASE_URL", "HYPERDRIVE_DATABASE_URL"):
+            continue
+        val = _extract_env_value(env, field_name)
+        if val is not None:
+            static_overrides[field_name] = val
 
-    return Settings(_env_file=None, **merged)
+    static_cfg = _get_or_build_static_settings(source, static_overrides)
+    if hd_url:
+        return static_cfg.model_copy(
+            update={
+                "HYPERDRIVE_DATABASE_URL": hd_url,
+                "DATABASE_URL": parse_database_url(hd_url),
+            }
+        )
+    return static_cfg
 
 
 @contextmanager

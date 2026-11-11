@@ -1,6 +1,7 @@
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import (
@@ -25,31 +26,79 @@ from app.services.audit import log_audit_event
 
 router = APIRouter(prefix="/roadmap", tags=["DSA Roadmap"])
 
+_TOPIC_COLUMNS = (
+    RoadmapTopic.id,
+    RoadmapTopic.title,
+    RoadmapTopic.slug,
+    RoadmapTopic.description,
+    RoadmapTopic.order_index,
+    RoadmapTopic.is_published,
+    RoadmapTopic.created_at,
+    RoadmapTopic.updated_at,
+)
+_SUBTOPIC_COLUMNS = (
+    RoadmapSubtopic.id,
+    RoadmapSubtopic.topic_id,
+    RoadmapSubtopic.parent_subtopic_id,
+    RoadmapSubtopic.title,
+    RoadmapSubtopic.slug,
+    RoadmapSubtopic.description,
+    RoadmapSubtopic.order_index,
+    RoadmapSubtopic.difficulty,
+    RoadmapSubtopic.is_published,
+    RoadmapSubtopic.created_at,
+    RoadmapSubtopic.updated_at,
+)
+
+
+def _build_subtopic_mapping_tree(
+    by_parent: dict[Any, List[dict[str, Any]]],
+    topic_id: uuid.UUID,
+    parent_id: Optional[uuid.UUID] = None,
+) -> List[dict[str, Any]]:
+    """Build nested subtopic dictionaries in O(n) from pre-ordered parent buckets."""
+    nodes = by_parent.get((topic_id, parent_id))
+    if not nodes:
+        return []
+    result: List[dict[str, Any]] = []
+    for row in nodes:
+        node = dict(row)
+        node["children"] = _build_subtopic_mapping_tree(
+            by_parent, topic_id, row["id"]
+        )
+        result.append(node)
+    return result
+
 
 def build_subtopic_tree(
     subtopics: List[RoadmapSubtopic], parent_id: Optional[uuid.UUID] = None
 ) -> List[RoadmapSubtopicResponse]:
     """Recursively builds the nested subtopic hierarchy."""
-    result = []
-    filtered = [s for s in subtopics if s.parent_subtopic_id == parent_id]
-    for s in sorted(filtered, key=lambda x: x.order_index):
-        children = build_subtopic_tree(subtopics, s.id)
-        item = RoadmapSubtopicResponse(
-            id=s.id,
-            topic_id=s.topic_id,
-            parent_subtopic_id=s.parent_subtopic_id,
-            title=s.title,
-            slug=s.slug,
-            description=s.description,
-            order_index=s.order_index,
-            difficulty=s.difficulty,
-            is_published=s.is_published,
-            created_at=s.created_at,
-            updated_at=s.updated_at,
-            children=children,
-        )
-        result.append(item)
-    return result
+    by_parent: dict[Optional[uuid.UUID], List[RoadmapSubtopic]] = {}
+    for s in sorted(subtopics, key=lambda x: x.order_index):
+        by_parent.setdefault(s.parent_subtopic_id, []).append(s)
+
+    def _build(pid: Optional[uuid.UUID]) -> List[RoadmapSubtopicResponse]:
+        result = []
+        for s in by_parent.get(pid, ()):
+            item = RoadmapSubtopicResponse(
+                id=s.id,
+                topic_id=s.topic_id,
+                parent_subtopic_id=s.parent_subtopic_id,
+                title=s.title,
+                slug=s.slug,
+                description=s.description,
+                order_index=s.order_index,
+                difficulty=s.difficulty,
+                is_published=s.is_published,
+                created_at=s.created_at,
+                updated_at=s.updated_at,
+                children=_build(s.id),
+            )
+            result.append(item)
+        return result
+
+    return _build(parent_id)
 
 
 @router.get("/topics", response_model=List[RoadmapTopicDetailResponse])
@@ -64,42 +113,36 @@ def get_roadmap_topics(
         "Admin privileges required to view unpublished roadmap content",
     )
 
-    query = db.query(RoadmapTopic)
+    topic_stmt = select(*_TOPIC_COLUMNS).order_by(RoadmapTopic.order_index.asc())
     if not include_unpublished:
-        query = query.filter(RoadmapTopic.is_published == True)  # noqa: E712
+        topic_stmt = topic_stmt.where(RoadmapTopic.is_published == True)  # noqa: E712
 
-    topics = query.order_by(RoadmapTopic.order_index.asc()).all()
+    topics = db.execute(topic_stmt).mappings().all()
     if not topics:
         return []
 
-    topic_ids = [t.id for t in topics]
-    sub_query = db.query(RoadmapSubtopic).filter(
-        RoadmapSubtopic.topic_id.in_(topic_ids)
+    topic_ids = [t["id"] for t in topics]
+    sub_stmt = (
+        select(*_SUBTOPIC_COLUMNS)
+        .where(RoadmapSubtopic.topic_id.in_(topic_ids))
+        .order_by(RoadmapSubtopic.order_index.asc())
     )
     if not include_unpublished:
-        sub_query = sub_query.filter(RoadmapSubtopic.is_published == True)  # noqa: E712
+        sub_stmt = sub_stmt.where(RoadmapSubtopic.is_published == True)  # noqa: E712
 
-    subtopics_by_topic: dict[uuid.UUID, List[RoadmapSubtopic]] = {}
-    for sub in sub_query.all():
-        subtopics_by_topic.setdefault(sub.topic_id, []).append(sub)
+    subtopics_by_parent: dict[Any, List[dict[str, Any]]] = {}
+    for sub in db.execute(sub_stmt).mappings().all():
+        subtopics_by_parent.setdefault(
+            (sub["topic_id"], sub["parent_subtopic_id"]), []
+        ).append(sub)
 
     results = []
     for t in topics:
-        tree = build_subtopic_tree(subtopics_by_topic.get(t.id, []), parent_id=None)
-
-        results.append(
-            RoadmapTopicDetailResponse(
-                id=t.id,
-                title=t.title,
-                slug=t.slug,
-                description=t.description,
-                order_index=t.order_index,
-                is_published=t.is_published,
-                created_at=t.created_at,
-                updated_at=t.updated_at,
-                subtopics=tree,
-            )
+        topic_dict = dict(t)
+        topic_dict["subtopics"] = _build_subtopic_mapping_tree(
+            subtopics_by_parent, t["id"], parent_id=None
         )
+        results.append(topic_dict)
     return results
 
 
@@ -117,34 +160,34 @@ def get_topic_by_slug(
     )
 
     topic = (
-        db.query(RoadmapTopic)
-        .filter(RoadmapTopic.slug == topic_slug)
+        db.execute(select(*_TOPIC_COLUMNS).where(RoadmapTopic.slug == topic_slug))
+        .mappings()
         .first()
     )
-    if not topic or (not include_unpublished and not topic.is_published):
+    if not topic or (not include_unpublished and not topic["is_published"]):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found"
         )
 
-    sub_query = db.query(RoadmapSubtopic).filter(
-        RoadmapSubtopic.topic_id == topic.id
+    sub_stmt = (
+        select(*_SUBTOPIC_COLUMNS)
+        .where(RoadmapSubtopic.topic_id == topic["id"])
+        .order_by(RoadmapSubtopic.order_index.asc())
     )
     if not include_unpublished:
-        sub_query = sub_query.filter(RoadmapSubtopic.is_published == True)  # noqa: E712
-    subtopics = sub_query.all()
-    tree = build_subtopic_tree(subtopics, parent_id=None)
+        sub_stmt = sub_stmt.where(RoadmapSubtopic.is_published == True)  # noqa: E712
 
-    return RoadmapTopicDetailResponse(
-        id=topic.id,
-        title=topic.title,
-        slug=topic.slug,
-        description=topic.description,
-        order_index=topic.order_index,
-        is_published=topic.is_published,
-        created_at=topic.created_at,
-        updated_at=topic.updated_at,
-        subtopics=tree,
+    subtopics_by_parent: dict[Any, List[dict[str, Any]]] = {}
+    for sub in db.execute(sub_stmt).mappings().all():
+        subtopics_by_parent.setdefault(
+            (sub["topic_id"], sub["parent_subtopic_id"]), []
+        ).append(sub)
+
+    topic_dict = dict(topic)
+    topic_dict["subtopics"] = _build_subtopic_mapping_tree(
+        subtopics_by_parent, topic["id"], parent_id=None
     )
+    return topic_dict
 
 
 @router.post(

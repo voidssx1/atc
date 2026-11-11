@@ -1,10 +1,12 @@
 import inspect
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import timezone
 from typing import Any, Dict, Generator, Iterator, Optional
 from urllib.parse import urlsplit
 
 from fastapi import Request
+from starlette.datastructures import State
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,7 +23,14 @@ from app.core.config import (
 # hitting request CPU limits on the first DB request.
 try:
     import psycopg  # noqa: F401
+    import psycopg._tz as _psycopg_tz  # noqa: F401
     import sqlalchemy.dialects.postgresql.psycopg  # noqa: F401
+
+    # Seed UTC timezone directly so Pyodide isolates without system tzdata avoid
+    # first-connection ZoneInfo("UTC") misses and repeated warning logs.
+    if hasattr(_psycopg_tz, "_timezones") and isinstance(_psycopg_tz._timezones, dict):
+        _psycopg_tz._timezones.setdefault(b"UTC", timezone.utc)
+        _psycopg_tz._timezones.setdefault(None, timezone.utc)
 except ImportError:
     pass
 
@@ -155,6 +164,15 @@ def open_db_session(env: Any = None) -> Iterator[Session]:
                 _active_db_url_ctx.set(None)
 
 
+def _get_shared_request_db(request: Optional[Request]) -> Optional[Session]:
+    """Return an active request-bound Session stored on Starlette `request.state`."""
+    req_state = getattr(request, "state", None) if request is not None else None
+    if not isinstance(req_state, State):
+        return None
+    existing = getattr(req_state, "_request_db_session", None)
+    return existing if isinstance(existing, Session) else None
+
+
 def get_db(request: Request = None) -> Generator[Session, None, None]:
     """
     Request-scoped database session dependency.
@@ -164,6 +182,11 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
     In local/test environments:
       Falls back to active settings DATABASE_URL.
     """
+    existing = _get_shared_request_db(request)
+    if existing is not None:
+        yield existing
+        return
+
     env = resolve_worker_env_from_request(request)
     with open_db_session(env=env) as db:
         yield db
@@ -173,8 +196,17 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
 def resolve_request_db_session(request: Optional[Request]) -> Iterator[Session]:
     """
     Open a request-scoped DB session on demand (after JWT/webhook verification),
-    honoring FastAPI `dependency_overrides[get_db]` in tests.
+    honoring FastAPI `dependency_overrides[get_db]` in tests and sharing that session
+    across downstream `Depends(get_db)` consumers in the same request.
     """
+    existing = _get_shared_request_db(request)
+    if existing is not None:
+        yield existing
+        return
+
+    req_state = getattr(request, "state", None) if request is not None else None
+    can_share = isinstance(req_state, State)
+
     app_obj = getattr(request, "app", None) if request is not None else None
     overrides = getattr(app_obj, "dependency_overrides", None)
     override = overrides.get(get_db) if isinstance(overrides, dict) else None
@@ -182,9 +214,13 @@ def resolve_request_db_session(request: Optional[Request]) -> Iterator[Session]:
         params = inspect.signature(override).parameters
         gen = override(request) if params else override()
         db = next(gen)
+        if can_share:
+            req_state._request_db_session = db
         try:
             yield db
         finally:
+            if can_share:
+                req_state._request_db_session = None
             try:
                 next(gen)
             except StopIteration:
@@ -196,4 +232,10 @@ def resolve_request_db_session(request: Optional[Request]) -> Iterator[Session]:
         return
 
     with open_db_session(env=resolve_worker_env_from_request(request)) as db:
-        yield db
+        if can_share:
+            req_state._request_db_session = db
+        try:
+            yield db
+        finally:
+            if can_share:
+                req_state._request_db_session = None

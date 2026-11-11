@@ -86,6 +86,12 @@ app.include_router(health_router)
 # Versioned API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# Pre-build OpenAPI schema and middleware stack at module load so deploy-time Worker
+# snapshot captures FastAPI route dependency introspection rather than charging it
+# to the first HTTP request's CPU budget.
+app.openapi()
+app.middleware_stack = app.build_middleware_stack()
+
 # Cloudflare Python Workers SDK Entrypoint (fetch + scheduled)
 try:
     from workers import WorkerEntrypoint, asgi

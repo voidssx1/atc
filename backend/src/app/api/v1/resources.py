@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -24,6 +25,23 @@ from app.services.url_checker import check_url_availability, validate_url_format
 
 router = APIRouter(prefix="/resources", tags=["Resources"])
 
+_RESOURCE_COLUMNS = (
+    Resource.id,
+    Resource.title,
+    Resource.url,
+    Resource.resource_type,
+    Resource.difficulty,
+    Resource.subtopic_id,
+    Resource.order_index,
+    Resource.availability_status,
+    Resource.last_checked_at,
+    Resource.status_code,
+    Resource.is_archived,
+    Resource.created_by_id,
+    Resource.created_at,
+    Resource.updated_at,
+)
+
 
 @router.get("/", response_model=List[ResourceResponse])
 def list_resources(
@@ -43,19 +61,26 @@ def list_resources(
         "Admin privileges required to view archived resources",
     )
 
-    query = db.query(Resource)
+    stmt = select(*_RESOURCE_COLUMNS)
     if not include_archived:
-        query = query.filter(Resource.is_archived == False)  # noqa: E712
+        stmt = stmt.where(Resource.is_archived == False)  # noqa: E712
     if subtopic_id:
-        query = query.filter(Resource.subtopic_id == subtopic_id)
+        stmt = stmt.where(Resource.subtopic_id == subtopic_id)
     if resource_type:
-        query = query.filter(Resource.resource_type == resource_type)
+        stmt = stmt.where(Resource.resource_type == resource_type)
     if difficulty:
-        query = query.filter(Resource.difficulty == difficulty)
+        stmt = stmt.where(Resource.difficulty == difficulty)
     if availability_status:
-        query = query.filter(Resource.availability_status == availability_status)
+        stmt = stmt.where(Resource.availability_status == availability_status)
 
-    return query.order_by(Resource.order_index.asc()).offset(skip).limit(limit).all()
+    rows = (
+        db.execute(
+            stmt.order_by(Resource.order_index.asc()).offset(skip).limit(limit)
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
 
 
 @router.get("/{resource_id}", response_model=ResourceResponse)
@@ -71,12 +96,16 @@ def get_resource(
         "Admin privileges required to view archived resources",
     )
 
-    res = db.query(Resource).filter(Resource.id == resource_id).first()
-    if not res or (not include_archived and res.is_archived):
+    res = (
+        db.execute(select(*_RESOURCE_COLUMNS).where(Resource.id == resource_id))
+        .mappings()
+        .first()
+    )
+    if not res or (not include_archived and res["is_archived"]):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found"
         )
-    return res
+    return dict(res)
 
 
 @router.post(
