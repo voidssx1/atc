@@ -133,3 +133,33 @@ def test_resend_client_error_suppresses_fallback():
         )
         assert result is False
         assert mock_post.call_count == 1
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 429])
+def test_resend_auth_domain_or_quota_error_falls_back_to_brevo(status_code):
+    settings.RESEND_API_KEY = "re_test_key"
+    settings.BREVO_API_KEY = "brevo_test_key"
+
+    resend_resp = MagicMock()
+    resend_resp.status_code = status_code
+
+    brevo_resp = MagicMock()
+    brevo_resp.status_code = 201
+
+    with patch.object(
+        httpx.AsyncClient,
+        "post",
+        new_callable=AsyncMock,
+        side_effect=[resend_resp, brevo_resp],
+    ) as mock_post:
+        result = asyncio.run(
+            EmailService.send_email(
+                to_email="student@bennett.edu.in",
+                subject="Welcome",
+                html_content="<p>Welcome</p>",
+            )
+        )
+        assert result is True
+        assert mock_post.call_count == 2
+        assert "api.resend.com" in mock_post.call_args_list[0][0][0]
+        assert "api.brevo.com" in mock_post.call_args_list[1][0][0]

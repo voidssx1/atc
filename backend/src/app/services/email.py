@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 import httpx
 
 from app.core.config import get_settings
+from app.core.http import create_async_http_client
 
 logger = logging.getLogger("email_service")
 
@@ -44,7 +45,7 @@ class ResendProvider:
         }
 
         try:
-            async with httpx.AsyncClient(
+            async with create_async_http_client(
                 timeout=httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
             ) as client:
                 response = await client.post(cls.ENDPOINT, json=payload, headers=headers)
@@ -53,7 +54,13 @@ class ResendProvider:
                 logger.info(f"[Resend] Email successfully delivered to {to_email}")
                 return True, False, None
 
-            # Client errors (4xx): invalid email, authentication failure, etc.
+            # Auth, unverified-domain/policy rejection, or quota/rate limits did not send: allow fallback
+            if response.status_code in (401, 403, 429):
+                err_msg = f"Provider error HTTP {response.status_code}"
+                logger.warning(f"[Resend] Eligible fallback failure dispatching to {to_email}: {err_msg}")
+                return False, True, err_msg
+
+            # Remaining 4xx (e.g. 400/422 payload/address error): non-retryable client error
             if 400 <= response.status_code < 500:
                 err_msg = f"Client error HTTP {response.status_code}"
                 logger.warning(f"[Resend] Non-retryable error dispatching to {to_email}: {err_msg}")
@@ -117,7 +124,7 @@ class BrevoProvider:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            async with create_async_http_client(timeout=httpx.Timeout(5.0)) as client:
                 response = await client.post(cls.ENDPOINT, json=payload, headers=headers)
 
             if 200 <= response.status_code < 300:

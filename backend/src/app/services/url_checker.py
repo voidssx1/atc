@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from typing import Tuple, Optional
 import httpx
 
+from app.core.http import create_async_http_client
 from app.models.resource import AvailabilityStatus
 
 
@@ -36,7 +37,7 @@ async def check_url_availability(
         "User-Agent": "ATC-DSA-Resource-Bot/1.0 (+https://atc.bennett.edu.in)"
     }
     try:
-        async with httpx.AsyncClient(
+        async with create_async_http_client(
             follow_redirects=True, timeout=timeout_seconds, headers=headers
         ) as client:
             # First try HEAD request

@@ -230,3 +230,22 @@ def test_availability_scan_claims_timestamp_before_external_http_probe(db_sessio
     assert stats["total_checked"] == 1
     assert stats["available"] == 1
     assert seen_pre_probe_claim == [True]
+
+
+def test_create_async_http_client_reuses_shared_ssl_context():
+    """Repeated outbound HTTP client creation must reuse one SSLContext rather than reloading CA bundles."""
+    from app.core import http as http_mod
+
+    http_mod._SHARED_SSL_CONTEXT = None
+    with patch("app.core.http.ssl.create_default_context") as mock_ssl:
+        sentinel_ctx = object()
+        mock_ssl.return_value = sentinel_ctx
+        with patch("app.core.http.httpx.AsyncClient") as mock_client:
+            http_mod.create_async_http_client(timeout=5.0)
+            http_mod.create_async_http_client(timeout=5.0)
+            http_mod.create_async_http_client(timeout=5.0)
+        assert mock_ssl.call_count == 1
+        assert mock_client.call_count == 3
+        for call in mock_client.call_args_list:
+            assert call.kwargs["verify"] is sentinel_ctx
+    http_mod._SHARED_SSL_CONTEXT = None

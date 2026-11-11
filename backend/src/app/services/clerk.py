@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.http import create_async_http_client
 from app.core.webcrypto import call_subtle, get_js_ffi, has_web_crypto
 from app.models.analytics import AuditLog
 from app.models.clerk import ClerkOutbox
@@ -80,7 +81,7 @@ async def _fetch_jwks_keys(jwks_url: str, force_refresh: bool = False) -> List[D
             return keys
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+        async with create_async_http_client(timeout=httpx.Timeout(5.0)) as client:
             resp = await client.get(jwks_url)
         if resp.status_code != 200:
             raise ClerkJWTVerificationError(
@@ -330,7 +331,7 @@ async def fetch_clerk_user(clerk_user_id: str) -> ClerkUserIdentity:
     headers = {"Authorization": f"Bearer {cfg.CLERK_SECRET_KEY}"}
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+        async with create_async_http_client(timeout=httpx.Timeout(5.0)) as client:
             resp = await client.get(url, headers=headers)
     except Exception as e:
         logger.warning(f"Clerk user fetch network failure for {clerk_user_id}: {type(e).__name__}")
@@ -358,7 +359,7 @@ async def delete_clerk_user(clerk_user_id: str) -> Tuple[bool, bool, Optional[in
     headers = {"Authorization": f"Bearer {cfg.CLERK_SECRET_KEY}"}
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+        async with create_async_http_client(timeout=httpx.Timeout(5.0)) as client:
             resp = await client.delete(url, headers=headers)
     except httpx.RequestError as e:
         return False, True, None, f"NetworkError: {type(e).__name__}"
