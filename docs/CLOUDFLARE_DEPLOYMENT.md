@@ -58,7 +58,7 @@ uv run alembic current
 
 Or add the direct URL as GitHub Actions repository secret `DATABASE_URL` and manually run the **Run ATC database migrations** workflow. Review the target database before running migrations. Never use another developer's production database.
 
-The backend seed fixtures are in `backend/seeds/`. After migrations, import the initial roadmap and resources using the documented admin import endpoints and a properly authorized tech-admin account.
+The migration workflow automatically runs `backend/scripts/seed_initial_content.py` after applying Alembic migrations. The script imports the bundled roadmap and resource fixtures idempotently; you can also run it locally with `uv run python scripts/seed_initial_content.py` from `backend/` after setting the direct `DATABASE_URL`.
 
 ## 5. Configure GitHub Actions
 
@@ -80,9 +80,9 @@ The Pages project must exist before the Pages workflow runs. The Worker name and
 1. Create the Neon database and Hyperdrive binding.
 2. Configure Clerk production application, issuer, JWKS URL and webhook.
 3. Update `backend/wrangler.toml` placeholders.
-4. Add GitHub secrets and the `VITE_API_BASE_URL` variable.
+4. Add GitHub secrets and both frontend variables (`VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY`).
 5. Create the Pages project `atc-dsa-final-frontend`.
-6. Run the database migration workflow once against your new database.
+6. Run the database migration workflow once against your new database; it also seeds the starter roadmap and resources.
 7. Run the backend deployment workflow.
 8. Set the `VITE_API_BASE_URL` variable to the actual Worker API URL and run the frontend deployment workflow.
 9. Verify `/health`, `/api/v1/docs`, browser CORS, authentication exchange, database-backed student flows, admin permissions, email delivery and scheduled jobs.
