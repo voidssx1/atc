@@ -87,14 +87,16 @@ The Pages project must exist before the Pages workflow runs. The Worker name and
 8. Set the `VITE_API_BASE_URL` variable to the actual Worker API URL and run the frontend deployment workflow.
 9. Verify `/health`, `/api/v1/docs`, browser CORS, authentication exchange, database-backed student flows, admin permissions, email delivery and scheduled jobs.
 
-## 7. Current integration boundary / remaining application work
+## 7. Integration status and remaining deployment-only tasks
 
-This branch assembles both applications and supplies deployment workflows, environment templates and a typed API request helper. It does **not** claim that the full product UI is complete:
+The React workspace is integrated with the FastAPI API: ClerkJS session authentication is bridged into React context; the Clerk JWT is exchanged for an opaque backend session; the application token is kept in memory and automatically refreshed through `/auth/refresh`; the current user role is loaded from `/auth/me`. Student screens cover dashboard, roadmap progress, resources, bookmarks and profile. Admin screens cover overview, user management, content draft submission/review and community content management. Events, Projects and Gallery are backed by the new `community_items` table and `/api/v1/community` routes.
 
-- The React source copied from the `frontend` branch remains a mostly static landing page.
-- Clerk React is not installed or wired into the React entry point yet. The backend is configured for Clerk production and documents the JWT exchange contract in `backend/FRONTEND_HANDOVER.md`.
-- Dashboard, roadmap, resources, progress, bookmarks and admin screens still need frontend implementation and API wiring.
-- Events, Projects and Gallery appear in the current landing-page navigation/cards, but the FastAPI API router does not expose corresponding feature APIs.
-- Resend/Brevo sender verification, real Clerk webhook delivery and live end-to-end tests require your provider accounts and domains.
+The original club landing page remains available as a separate view. The remaining work is account configuration and live verification, not writing the UI:
 
-Do not treat a successful static Pages deployment as proof that authentication or application workflows are integrated.
+- Add GitHub repository variables `VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY`.
+- Configure your Clerk production instance: allowed origins/redirect URLs for your Pages domain, verified Bennett student email policy, and a webhook to `/api/v1/webhooks/clerk` with the required user/session events.
+- Configure your own Neon database and Hyperdrive binding, then run Alembic migrations through revision `004_community_content`.
+- Add Cloudflare credentials and backend secrets; verify Resend/Brevo sender DNS and inbox delivery.
+- After deployment, run end-to-end checks for student sign-in, role hydration, token refresh, student progress/bookmarks, admin content approvals, community publishing, webhooks, CORS and Cron jobs.
+
+No Cloudflare deployment or production database migration has been performed from this branch.
