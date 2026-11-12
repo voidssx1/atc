@@ -1,75 +1,41 @@
-# React + TypeScript + Vite
+# ATC DSA Hub — React workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite frontend for the Alan Turing Club DSA Hub.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Run npm ci, then copy .env.example to .env.local.
 
-## React Compiler
+Set these values in frontend/.env.local:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- VITE_API_BASE_URL=http://localhost:8000/api/v1
+- VITE_CLERK_PUBLISHABLE_KEY=pk_test_... from your Clerk application.
 
-## Expanding the ESLint configuration
+Start the frontend with npm run dev.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The FastAPI backend must be running locally at http://localhost:8000 with CORS allowing http://localhost:5173.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Authentication and API
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- src/auth.tsx loads the official ClerkJS and Clerk UI bundles from the Frontend API domain encoded in the publishable key, then exposes authentication state through a React context.
+- Clerk session JWTs are exchanged at POST /api/v1/auth/clerk/exchange.
+- The opaque application session token is held in memory only; it is never written to localStorage or sessionStorage.
+- src/lib/api.ts sends bearer tokens, refreshes the backend session after an eligible 401, and retries the request once.
+- src/App.tsx contains the student workspace, admin workspace, and community pages.
+- The original club landing page is preserved in src/LandingPage.tsx.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Student workspace
 
-```
+Dashboard, DSA roadmap/progress, learning resources, bookmarks, profile, events, projects and gallery.
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Admin workspace
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Admin metrics, user role/status management, roadmap/resource draft submission and review, plus event/project/gallery creation, publishing and archiving.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Commands
 
-```
+npm run lint
+npm run build
+npm run preview
+
+Cloudflare Pages deployment uses the final branch, the frontend/ directory, and the dist/ build output. Configure VITE_API_BASE_URL and VITE_CLERK_PUBLISHABLE_KEY as GitHub Actions repository variables.
