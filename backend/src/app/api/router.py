@@ -7,6 +7,7 @@ from app.api.v1 import (
     analytics,
     auth,
     bookmarks,
+    community,
     dashboard,
     drafts,
     health,
@@ -25,6 +26,7 @@ api_router.include_router(health.router)
 # 1. Student Authentication & Clerk Webhooks
 api_router.include_router(auth.router)
 api_router.include_router(webhooks.router)
+api_router.include_router(community.router)
 
 # 2. Admin User Management & Permissions
 api_router.include_router(admin_users.router)

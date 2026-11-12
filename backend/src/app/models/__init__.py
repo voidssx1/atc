@@ -6,6 +6,7 @@ from app.models.resource import Resource, ResourceType, AvailabilityStatus
 from app.models.draft import ContentDraft, DraftStatus, EntityType
 from app.models.progress import StudentProgress, Bookmark, ProgressStatus
 from app.models.analytics import AuditLog, ResourceAnalytics
+from app.models.community import CommunityItem, CommunityKind
 
 __all__ = [
     "Base",
@@ -28,4 +29,6 @@ __all__ = [
     "ProgressStatus",
     "AuditLog",
     "ResourceAnalytics",
+    "CommunityItem",
+    "CommunityKind",
 ]
