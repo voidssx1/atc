@@ -11,6 +11,7 @@ from app.core.rate_limit import (
     resolve_rate_limit_policy,
 )
 from app.main import app
+from app.api.deps import get_db
 
 
 def test_rate_limit_policy_resolution():
@@ -139,7 +140,7 @@ async def test_protected_endpoints_enforce_429_with_cors(
 
 
 @pytest.mark.anyio
-async def test_rate_limit_allows_when_success_true_and_fails_open_on_binding_error():
+async def test_rate_limit_allows_when_success_true_and_fails_open_on_binding_error(db_session):
     calls = []
 
     async def allow_limit(payload):
@@ -161,8 +162,13 @@ async def test_rate_limit_allows_when_success_true_and_fails_open_on_binding_err
         scope["cloudflare"] = {"env": worker_env}
         await app(scope, receive, send)
 
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=env_injecting_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+    try:
+      async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         # Allowed request reaches auth handler (fails JWT check with 401, not 429)
         r_allow = await ac.post(
             "/api/v1/auth/clerk/exchange",
@@ -191,6 +197,8 @@ async def test_rate_limit_allows_when_success_true_and_fails_open_on_binding_err
             },
         )
         assert r_opt.status_code == 200
+    finally:
+      app.dependency_overrides.clear()
 
 
 @pytest.mark.anyio

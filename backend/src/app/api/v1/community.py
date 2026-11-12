@@ -24,7 +24,7 @@ def list_community_items(
     query = db.query(CommunityItem).filter(CommunityItem.kind == kind, CommunityItem.is_archived == False)
     if not include_unpublished:
         query = query.filter(CommunityItem.is_published == True)
-    return query.order_by(CommunityItem.order_index.asc(), CommunityItem.created_at.desc()).all()
+    return [_serialize(item) for item in query.order_by(CommunityItem.order_index.asc(), CommunityItem.created_at.desc()).all()]
 
 
 @router.post("/", response_model=CommunityItemResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role([UserRole.TECH_ADMIN, UserRole.CONTENT_ADMIN]))])
