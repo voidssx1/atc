@@ -1,0 +1,51 @@
+/* ─── Design tokens ──────────────────────────────────────────── */
+:root {
+  /* Light theme (default) */
+  --bg:            #f5f3f4;
+  --fg:            #111111;
+  --fg-muted:      #555353;
+  --line:          #dcdadc;
+  --line-subtle:   #e8e6e8;
+  --dot:           #787678;
+  --plus:          #9e9c9e;
+  --crosshair:     #777577;
+  --bar:           #111111;
+  --circle-fill:   #efedee;
+
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--fg);
+  background-color: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme='dark'] {
+  --bg:            #1a1918;
+  --fg:            #ece9e6;
+  --fg-muted:      #9e9b97;
+  --line:          #3a3835;
+  --line-subtle:   #2e2c2a;
+  --dot:           #5a5856;
+  --plus:          #6a6865;
+  --crosshair:     #6a6865;
+  --bar:           #ece9e6;
+  --circle-fill:   #221f1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+  background-color: var(--bg);
+}
+

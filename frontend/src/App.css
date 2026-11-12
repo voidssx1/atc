@@ -1,0 +1,1058 @@
+:root {
+  --card-pointer-light: rgba(0, 0, 0, 0.1);
+  --card-inner-glow: rgba(0, 0, 0, 0.035);
+}
+
+:root[data-theme='dark'] {
+  --card-pointer-light: rgba(255, 255, 255, 0.09);
+  --card-inner-glow: rgba(255, 255, 255, 0.045);
+}
+
+.landing-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  background-color: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  /* Smooth theme colour transition */
+  transition: background-color 0.35s ease;
+}
+
+.site-pages {
+  width: 100%;
+  overflow-x: clip;
+}
+
+.blank-page {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100svh;
+  background-color: var(--bg);
+  padding: clamp(28px, 6vw, 88px);
+  display: flex;
+  align-items: center;
+}
+
+/* ─── Cards Section Geometric Background ─────────────────────── */
+.cards-geo-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+/* Corner & Ambient Backdrop Geometry */
+.cards-geo-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cards-geo-backdrop .svg-dot  { fill:   var(--dot); }
+.cards-geo-backdrop .svg-plus { stroke: var(--plus); }
+
+/* Corner plus and dot grids follow cursor subtly */
+.cards-plus-grid {
+  transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.cards-dot-grid {
+  transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* 3D Scene Viewport: follows cursor subtly */
+.cards-geo-scene {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(1160px, 96vw);
+  height: min(1160px, 96vw);
+  transform: translate(calc(-50% + var(--shift-circles-x, 0px)), calc(-50% + var(--shift-circles-y, 0px)));
+  transition: transform 0.14s cubic-bezier(0.2, 0, 0.2, 1);
+  perspective: 1100px;
+  perspective-origin: 50% 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cards-geo-rig {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50% 0;
+  transform: rotateX(var(--shift-orbit-tilt-x, 0deg)) rotateY(var(--shift-orbit-tilt-y, 0deg));
+  transition: transform 0.16s cubic-bezier(0.2, 0, 0.2, 1);
+  animation: cardsOrbitBreathe 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.cards-geo-inner-rig {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50% 0;
+  animation: cardsInnerOrbitBreathe 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes cardsOrbitBreathe {
+  0% {
+    transform: rotateX(var(--shift-orbit-tilt-x, 0deg)) rotateY(var(--shift-orbit-tilt-y, 0deg)) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(calc(var(--shift-orbit-tilt-x, 0deg) + 1.8deg)) rotateY(calc(var(--shift-orbit-tilt-y, 0deg) + 2.2deg)) rotateZ(1.2deg);
+  }
+  100% {
+    transform: rotateX(calc(var(--shift-orbit-tilt-x, 0deg) - 1.5deg)) rotateY(calc(var(--shift-orbit-tilt-y, 0deg) - 1.8deg)) rotateZ(-1deg);
+  }
+}
+
+@keyframes cardsInnerOrbitBreathe {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(-2deg) rotateY(-2.4deg) rotateZ(-1.5deg);
+  }
+  100% {
+    transform: rotateX(1.6deg) rotateY(1.8deg) rotateZ(1.2deg);
+  }
+}
+
+/* Rings in 3D */
+.cards-geo-ring {
+  position: absolute;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  box-sizing: border-box;
+}
+
+/* Outer primary ring */
+.cards-ring-outer {
+  inset: 0;
+  border: 1px solid var(--line);
+  opacity: 0.6;
+}
+
+/* Tilted orbital meridian rings */
+.cards-ring-orbit-1 {
+  inset: 0;
+  border: 1px solid var(--line);
+  transform: rotateX(66deg) rotateY(18deg);
+  opacity: 0.5;
+}
+
+.cards-ring-orbit-2 {
+  inset: 8%;
+  border: 1px solid var(--line);
+  transform: rotateX(-48deg) rotateY(52deg);
+  opacity: 0.45;
+}
+
+.cards-ring-orbit-3 {
+  inset: 14%;
+  border: 1px solid var(--line);
+  transform: rotateX(74deg) rotateY(-34deg);
+  opacity: 0.4;
+}
+
+/* Equatorial construction ring */
+.cards-ring-equator {
+  inset: 0;
+  border: 1px dashed var(--line);
+  transform: rotateX(84deg);
+  opacity: 0.32;
+}
+
+/* Inner concentric sphere rings */
+.cards-ring-inner {
+  top: 24%;
+  left: 24%;
+  width: 52%;
+  height: 52%;
+  border: 1px solid var(--line);
+  opacity: 0.58;
+}
+
+.cards-ring-inner-orbit {
+  top: 24%;
+  left: 24%;
+  width: 52%;
+  height: 52%;
+  border: 1px solid var(--line);
+  transform: rotateX(55deg) rotateY(-30deg);
+  opacity: 0.42;
+}
+
+.second-page-grid {
+  position: relative;
+  z-index: 2;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.landing-card {
+  position: relative;
+  isolation: isolate;
+  grid-column: span 2;
+  min-height: clamp(230px, 28vw, 320px);
+  padding: 14px 22px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  box-shadow: inset 0 0 26px var(--card-inner-glow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: visible;
+  transform: perspective(950px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transform-style: preserve-3d;
+  transition: border-color 180ms ease, box-shadow 220ms ease, transform 150ms ease-out;
+}
+
+.landing-card::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.landing-card::before {
+  z-index: -1;
+  inset: 0;
+  background: radial-gradient(
+    260px circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
+    var(--card-pointer-light),
+    transparent 74%
+  );
+  filter: blur(13px);
+}
+
+.landing-card:hover {
+  border-color: var(--fg-muted);
+  box-shadow: inset 0 0 26px var(--card-inner-glow);
+}
+
+.landing-card:hover::before {
+  opacity: 1;
+}
+
+.landing-card:nth-child(4) {
+  grid-column: 2 / span 2;
+}
+
+.card-art-stage {
+  position: relative;
+  width: 100%;
+  height: clamp(173px, 22vw, 258px);
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.artwork-halo {
+  position: absolute;
+  width: min(82%, 238px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--fg) 7%, var(--bg)) 0%,
+    color-mix(in srgb, var(--fg) 4%, var(--bg)) 54%,
+    transparent 76%
+  );
+  pointer-events: none;
+}
+
+.card-artwork {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: min(100%, 258px);
+  height: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  mix-blend-mode: multiply;
+}
+
+:root[data-theme='dark'] .card-artwork {
+  filter: invert(1) grayscale(1) contrast(1.08);
+  mix-blend-mode: screen;
+}
+
+.landing-card h2 {
+  margin: 10px 0 0;
+  color: var(--fg);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .blank-page {
+    align-items: flex-start;
+    padding: 26px 20px;
+  }
+
+  .second-page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .landing-card,
+  .landing-card:nth-child(4) {
+    grid-column: auto;
+    min-height: 230px;
+    padding: 14px;
+  }
+
+  .landing-card:last-of-type {
+    grid-column: 1 / -1;
+  }
+
+  .card-art-stage { height: 167px; }
+
+  .artwork-halo { width: min(78%, 190px); }
+
+  .landing-card h2 {
+    font-size: 12px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-card {
+    transition: none;
+  }
+}
+
+/* Background Geometric SVG */
+.geometric-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  animation: bgEntrance 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+  will-change: opacity, transform;
+}
+
+@keyframes bgEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ─── Geometric Background Animation ──────────────────────────── */
+
+/* The interactive group is a passthrough container; transforms are applied per-circle */
+.geo-interactive-circles {
+  /* No transform on group — each circle has its own parallax & floating layers */
+}
+
+/* ── Per-circle cursor parallax (outer layer, depth-scaled) ── */
+.geo-circle-outer {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.6),
+    calc(var(--shift-circles-y, 0px) * 0.6)
+  );
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.geo-circle-orbital {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 1.0),
+    calc(var(--shift-circles-y, 0px) * 1.0)
+  );
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.geo-circle-inner {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.8),
+    calc(var(--shift-circles-y, 0px) * 0.8)
+  );
+  transition: transform 0.16s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.geo-circle-sweep {
+  transform: translate(
+    calc(var(--shift-circles-x, 0px) * 0.3),
+    calc(var(--shift-circles-y, 0px) * 0.3)
+  );
+  transition: transform 0.26s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* ── Idle float animations (inner layer, subtle 3–6px drift, out-of-phase) ── */
+@keyframes geoFloat1 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+@keyframes geoFloat2 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(4px); }
+}
+@keyframes geoFloat3 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-3px); }
+}
+@keyframes geoFloat4 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(6px); }
+}
+
+.geo-float-outer   { animation: geoFloat1  9s ease-in-out infinite; }
+.geo-float-orbital { animation: geoFloat2 11s ease-in-out infinite; animation-delay: -3s; }
+.geo-float-inner   { animation: geoFloat3  7s ease-in-out infinite; animation-delay: -5s; }
+.geo-float-sweep   { animation: geoFloat4 13s ease-in-out infinite; animation-delay: -7s; }
+
+/* Construction lines: strictly static, anchored to original SVG coordinates */
+.geo-static-lines {
+  pointer-events: none;
+}
+
+/* Crosshair Markers: responsive to cursor, subtle breathing, NO scroll movement */
+.geo-crosshairs {
+  transform: translate(var(--shift-crosshair-x, 0px), var(--shift-crosshair-y, 0px));
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.crosshair-marker {
+  animation: crosshairBreathing 6s ease-in-out infinite alternate;
+}
+
+@keyframes crosshairBreathing {
+  0% {
+    opacity: 0.65;
+  }
+  100% {
+    opacity: 0.98;
+  }
+}
+
+/* Secondary Grids: responsive to cursor, anchored against scroll */
+.geo-grids {
+  transform: translate(var(--shift-grid-x, 0px), var(--shift-grid-y, 0px));
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.geo-center-marker {
+  transform: translate(calc(var(--shift-circles-x, 0px) * 0.4), calc(var(--shift-circles-y, 0px) * 0.4));
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Header */
+.site-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 34px 108px 0 108px;
+  width: 100%;
+  box-sizing: border-box;
+  animation: headerEntrance 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+@keyframes headerEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header-logo .logo-text {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  display: inline-flex;
+  align-items: baseline;
+  line-height: 1;
+  transition: opacity 0.25s ease, color 0.35s ease;
+}
+
+.header-logo .logo-text:hover {
+  opacity: 0.75;
+}
+
+.logo-stylized-a {
+  display: inline-flex;
+  align-items: baseline;
+  width: 29.5px;
+  height: 26px;
+  vertical-align: baseline;
+  margin-right: 2px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.header-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: 58px;
+  padding-top: 6px;
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.nav-item a {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  color: var(--fg);
+  text-decoration: none;
+  line-height: 1;
+  transition: color 0.25s ease, letter-spacing 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-item:hover a {
+  color: var(--fg);
+  letter-spacing: 0.21em;
+}
+
+.nav-underline {
+  width: 100%;
+  height: 1.5px;
+  background-color: var(--fg);
+  margin-top: 15px;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.35s ease;
+}
+
+.nav-item.active:hover .nav-underline {
+  transform: scaleX(1.12);
+}
+
+.nav-hover-line {
+  width: 0;
+  height: 1.5px;
+  background-color: var(--fg);
+  margin-top: 15px;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.35s ease;
+}
+
+.nav-item:not(.active):hover .nav-hover-line {
+  width: 100%;
+}
+
+/* Main Hero Title */
+.hero-content {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-left: 206px;
+  padding-top: 215px;
+}
+
+.title-lockup {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.main-title {
+  margin: 0;
+  padding: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 800;
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  line-height: 0.88;
+  transition: color 0.35s ease;
+}
+
+.title-row {
+  display: flex;
+  align-items: flex-end;
+  font-size: 154px;
+  text-transform: uppercase;
+  will-change: transform, opacity;
+}
+
+.title-row-1 {
+  letter-spacing: 0.08em;
+  transform: scaleX(1.18);
+  transform-origin: left bottom;
+  animation: titleEntrance1 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+
+.title-row-2 {
+  letter-spacing: 0.09em;
+  margin-top: 8px;
+  transform: scaleX(1.2);
+  transform-origin: left bottom;
+  animation: titleEntrance2 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.32s both;
+}
+
+@keyframes titleEntrance1 {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scaleX(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1.18);
+  }
+}
+
+@keyframes titleEntrance2 {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scaleX(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1.2);
+  }
+}
+
+/* Stylized A / Lambda — Preserved exactly for both As in ALAN and branding */
+.letter-stylized-a {
+  display: inline-flex;
+  align-items: flex-end;
+  width: 126px;
+  height: 118px;
+  margin-right: 8px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.letter-stylized-a-second {
+  margin-left: 6px;
+  margin-right: 8px;
+}
+
+.lambda-glyph {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Brand inline A glyph — scales with surrounding text at any font size */
+.brand-stylized-a {
+  display: inline-block;
+  width: 0.86em;
+  height: 0.76em;
+  vertical-align: -0.03em;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-right: 0.02em;
+  margin-left: 0.01em;
+}
+
+.brand-stylized-a .lambda-glyph {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* CLUB subtitle */
+.title-sub {
+  display: flex;
+  justify-content: space-between;
+  width: 412px;
+  margin-top: 36px;
+  padding-left: 21px;
+  animation: subEntrance 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.48s both;
+}
+
+@keyframes subEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.title-sub span {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 300;
+  font-size: 35px;
+  color: var(--fg);
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.25s ease, color 0.35s ease;
+}
+
+.title-sub span:hover {
+  transform: translateY(-2px);
+}
+
+/* ─── 1280px and below (small laptop) ─────────────────────── */
+@media (max-width: 1280px) {
+  .site-header {
+    padding: 28px 48px 0 48px;
+  }
+  .header-nav {
+    gap: 36px;
+  }
+  .hero-content {
+    padding-left: 80px;
+    padding-top: 140px;
+  }
+  .title-row {
+    font-size: 110px;
+  }
+  .letter-stylized-a {
+    width: 90px;
+    height: 84px;
+  }
+  .title-row-2 {
+    margin-top: 6px;
+  }
+  .title-sub {
+    width: 290px;
+    margin-top: 24px;
+    padding-left: 14px;
+  }
+  .title-sub span {
+    font-size: 26px;
+  }
+}
+
+/* ─── Mobile navigation: completely hidden on desktop ──────── */
+.mobile-controls,
+.mobile-nav-overlay,
+.mobile-nav-drawer {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .mobile-controls,
+  .mobile-nav-overlay,
+  .mobile-nav-drawer {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+/* ─── 768px and below (tablet / mobile) ───────────────────── */
+@media (max-width: 768px) {
+
+  /* Header: single row — logo left, controls right */
+  .site-header {
+    padding: 22px 20px 0 20px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0;
+  }
+
+  /* Hide the full desktop nav */
+  .header-nav {
+    display: none;
+  }
+
+  /* Show the compact controls (theme toggle + hamburger) */
+  .mobile-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── Hamburger button ───────────────────────────────────── */
+  .hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--fg);
+  }
+
+  .ham-bar {
+    display: block;
+    width: 20px;
+    height: 1.5px;
+    background: var(--fg);
+    border-radius: 1px;
+    transform-origin: center;
+    transition:
+      transform  0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity    0.2s ease,
+      width      0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Morph into × when open */
+  .ham-bar-1.open { transform: translateY(6.5px) rotate(45deg); }
+  .ham-bar-2.open { opacity: 0; width: 0; }
+  .ham-bar-3.open { transform: translateY(-6.5px) rotate(-45deg); }
+
+  /* ── Backdrop overlay ───────────────────────────────────── */
+  .mobile-nav-overlay {
+    display: none;
+  }
+  .mobile-nav-overlay.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: transparent;
+  }
+
+  /* ── Mobile drawer ──────────────────────────────────────── */
+  .mobile-nav-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(260px, 76vw);
+    z-index: 50;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    padding: 48px 32px;
+
+    /* Enter from right */
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .mobile-nav-drawer.open {
+    transform: translateX(0);
+  }
+
+  .mobile-nav-item {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--fg-muted);
+    text-decoration: none;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line-subtle);
+    transition: color 0.2s ease, letter-spacing 0.25s ease;
+  }
+
+  .mobile-nav-item:last-child {
+    border-bottom: none;
+  }
+
+  .mobile-nav-item.active {
+    color: var(--fg);
+    letter-spacing: 0.22em;
+  }
+
+  .mobile-nav-item:hover {
+    color: var(--fg);
+  }
+
+  /* ── Hero ───────────────────────────────────────────────── */
+  .hero-content {
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 0;
+    /* Vertically centre the lockup in the remaining space */
+    justify-content: center;
+    padding-bottom: 10vh;
+  }
+
+  .main-title {
+    line-height: 0.86;
+  }
+
+  /*
+   * Font size: fluid from 390px → 768px.
+   * At 390px wide with 24px padding each side, usable width = 342px.
+   * TURING (6 chars) is the wider row; at ~0.6 ch/px ratio
+   * for the font we target ~72px so it fills ~342px well.
+   * We use clamp so it scales naturally at in-between widths.
+   */
+  .title-row {
+    font-size: clamp(68px, 18.5vw, 110px);
+    transform: none !important;    /* cancel desktop scaleX */
+    letter-spacing: 0.02em;
+  }
+
+  .title-row-1 {
+    letter-spacing: 0.03em;        /* slightly more for ALAN */
+    transform: none !important;
+  }
+
+  .title-row-2 {
+    margin-top: 4px;
+    transform: none !important;
+  }
+
+  .letter-stylized-a {
+    /* Scale the custom A proportionally with the font size */
+    width:  clamp(55px, 14.5vw, 90px);
+    height: clamp(51px, 13.5vw, 84px);
+    margin-right: 4px;
+  }
+
+  /* CLUB — keep readable, proportional to heading */
+  .title-sub {
+    /* Match visual width of the two heading rows */
+    width: auto;
+    margin-top: clamp(16px, 4vw, 28px);
+    padding-left: 4px;
+    padding-right: 0;
+    /* Distribute the four letters evenly */
+    justify-content: space-between;
+    max-width: clamp(200px, 52vw, 310px);
+  }
+
+  .title-sub span {
+    font-size: clamp(18px, 5vw, 28px);
+  }
+}
+
+/* Accessibility: Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .geometric-background,
+  .site-header,
+  .title-row-1,
+  .title-row-2,
+  .title-sub,
+  .crosshair-marker,
+  .geo-float-outer,
+  .geo-float-orbital,
+  .geo-float-inner,
+  .geo-float-sweep {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  .geo-interactive-circles,
+  .geo-circle-outer,
+  .geo-circle-orbital,
+  .geo-circle-inner,
+  .geo-circle-sweep,
+  .geo-crosshairs,
+  .geo-grids,
+  .geo-center-marker {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* On desktop, reduced-motion must still show the scaleX final state */
+@media (prefers-reduced-motion: reduce) and (min-width: 769px) {
+  .title-row-1 {
+    transform: scaleX(1.18) !important;
+  }
+  .title-row-2 {
+    transform: scaleX(1.2) !important;
+  }
+}
+
+/* ─── Theme Toggle Button ──────────────────────────────────────── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--fg);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  /* Align with nav items visually */
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  opacity: 1;
+}
+
+.theme-toggle svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(20deg);
+}
+
+/* Align desktop theme toggle vertically with the nav links */
+.header-nav .theme-toggle {
+  align-self: flex-start;
+  margin-top: -7.5px;
+}
