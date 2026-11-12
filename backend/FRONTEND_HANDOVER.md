@@ -1,9 +1,9 @@
 # Frontend Integration & Handover Guide
 
-This document provides the complete integration contract for connecting a React (or React/Next.js) frontend to the **ATC DSA Roadmap & Resource Hub** backend (`https://atc-dsa-backend.webatc77.workers.dev`, prefix `/api/v1`).
+This document provides the complete integration contract for connecting a React (or React/Next.js) frontend to the **ATC DSA Roadmap & Resource Hub** backend (`https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev`, prefix `/api/v1`).
 
 > **Integration Status (`Backend` branch)**:
-> - **Backend Live (`https://atc-dsa-backend.webatc77.workers.dev`)**: Verified live `/health` (`200`), `/api/v1/docs` & `/api/v1/openapi.json` (`200`, 58 paths / 72 ops), `http://localhost:5173` CORS preflight (`200`), `GET /api/v1/roadmap/topics` (`200`, 4 topics / 8 subtopics / 2 nested), `GET /api/v1/resources/` (`200`, 8 resources), `TECH_ADMIN` Clerk JWT exchange + `/auth/logout` (`200`), and `410`/`401`/`400` guards.
+> - **Upstream environment (historical only):** The original Backend branch reports live tests on a different account. Those results do not validate this independent final branch. The endpoint above is a placeholder until you deploy your own Worker. Do not treat the upstream deployment as yours. **Historical test record (not this deployment):** `/health` (`200`), `/api/v1/docs` & `/api/v1/openapi.json` (`200`, 58 paths / 72 ops), `http://localhost:5173` CORS preflight (`200`), `GET /api/v1/roadmap/topics` (`200`, 4 topics / 8 subtopics / 2 nested), `GET /api/v1/resources/` (`200`, 8 resources), `TECH_ADMIN` Clerk JWT exchange + `/auth/logout` (`200`), and `410`/`401`/`400` guards.
 > - **Frontend (`origin/frontend`) Pending Integration**: `origin/frontend` is currently a static landing page without `@clerk/clerk-react` or API wiring.
 > - **Integration & Handover Notes**:
 >   - Direct `PUT`/`DELETE` on published roadmap topics/subtopics and active resources returns **`409 Conflict`** — content edits must go through the `/api/v1/drafts/` workflow (`draft` -> `submit` -> independent `tech_admin` `approve`/`reject` -> `publish`, where creators cannot self-approve/self-reject `403`, and immutable revision history is queryable via `GET /api/v1/drafts/?entity_id=...&status=published`).
@@ -17,8 +17,8 @@ This document provides the complete integration contract for connecting a React 
 
 | Variable | Example / Value | Notes |
 |---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` (local) / `https://atc-dsa-backend.webatc77.workers.dev/api/v1` (prod) | Do not include a trailing slash |
-| `VITE_CLERK_PUBLISHABLE_KEY` | `pk_test_...` | Obtained from Clerk Dashboard (`great-bug-2878.clerk.accounts.dev`) |
+| `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` (local) / `https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1` (prod) | Do not include a trailing slash |
+| `VITE_CLERK_PUBLISHABLE_KEY` | `pk_test_...` | Obtained from Clerk Dashboard (`YOUR_CLERK_ISSUER`) |
 
 ### 1.2 Backend CORS & Origin Allowlist Requirements
 
@@ -46,8 +46,8 @@ To seed an environment once authenticated as a `tech_admin`, import via the supp
 ## 2. Clerk React Authentication Setup
 
 The backend runs with `AUTH_MODE = "clerk"` in production:
-- Clerk Issuer: `https://great-bug-2878.clerk.accounts.dev`
-- Clerk JWKS URL: `https://great-bug-2878.clerk.accounts.dev/.well-known/jwks.json`
+- Clerk Issuer: `https://YOUR_CLERK_ISSUER`
+- Clerk JWKS URL: `https://YOUR_CLERK_ISSUER/.well-known/jwks.json`
 - Student Email Domain Restriction: `@bennett.edu.in` (students signing in via Clerk with non-Bennett emails receive `403 Forbidden` during `/auth/clerk/exchange`).
 
 Legacy password endpoints (`/auth/register`, `/auth/login`, `/auth/verify-email`, `/auth/forgot-password`, `/auth/reset-password`) return **`410 Gone`** in production. Use Clerk's hosted components (`<SignIn />`, `<SignUp />`, `<UserButton />`) or Clerk hooks (`useAuth()`, `useClerk()`).

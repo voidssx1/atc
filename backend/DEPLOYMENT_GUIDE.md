@@ -2,12 +2,10 @@
 
 This guide covers configuring Neon PostgreSQL, Cloudflare Hyperdrive, Cloudflare Secrets & Variables, Clerk webhooks, Resend/Brevo email delivery, Cloudflare Workers Rate Limiting / optional Zone WAF rules, Python Workers deployment (`pywrangler`), smoke testing, and rollback procedures for `atc-dsa-backend`.
 
-> **Current Verification Boundary (`Backend` branch)**:
-> - **Verified Locally & Linux Packaging**: Python compilation (`python -m compileall -q src scripts tests`), full SQLite + mocked-external-provider `pytest` suite (**`108 passed`**, including RBAC across all 4 roles, draft self-approval/revision immutability, bounded duplicate-safe imports, Clerk/Svix mocks, Resend/Brevo mocks, Hyperdrive engine reuse, lazy OpenAPI snapshot parity, and prefix-guarded routing), plus Linux CI `pywrangler sync` & `wrangler deploy --dry-run` (`43077148840`, `Total Upload: 29323.54 KiB / gzip: 7506.77 KiB`).
-> - **Verified Live (`https://atc-dsa-backend.webatc77.workers.dev`, Version `4232e353-deec-4aa0-8052-defae0bc499a`, commit `011bf25`)**: Worker deployed with Hyperdrive + Neon (`003_clerk_auth_policies` applied, seeded `4` topics / `8` subtopics / `8` resources, `TECH_ADMIN` linked); `43/43` live requests (cold bursts, 8-way simultaneous concurrency with `max_cpuMs=592`, `/health`, `/api/v1/openapi.json` `45–52ms` CPU, `/api/v1/docs`, `/api/v1/roadmap/topics`, `/api/v1/resources/`, `TECH_ADMIN` Clerk exchange/outbox/dashboard/logout, non-Bennett `403`, unauth `401`, `POST /admin/jobs/test-email` Resend `HTTP 403` -> Brevo `200`, `http://localhost:5173` CORS preflight) succeeded with **0 `503`/`1102`/`10021` errors**. Earlier on `d6c795b` (`94d36316`) & `9c1d5f6`, multi-role `STUDENT`/`VIEWER`/`CONTENT_ADMIN` RBAC + draft workflow, live Clerk Dashboard signed webhooks (`user.deleted`, `user.updated`, `session.revoked`), `RL_AUTH_EXCHANGE`/`RL_AUTH_REFRESH` `429 Retry-After: 60`, and the autonomous `18:00:00Z` hourly Cron (`cron="0 1-23 * * *"`, `outcome=ok`, `user_sessions` `7 -> 0`, `resources.last_checked_at` left `0/8`) all passed live.
-> - **Pending External / Operational Items**: Resend/Brevo sender domain DNS authentication & inbox receipt verification (`noreply@bennett.edu.in` fails Resend with `HTTP 403` and risks `p=quarantine` DMARC on Brevo relays; no inbox or ESP dashboard credentials available here), live midnight `00:00:00 UTC` daily resource availability Cron observation (`0 0 * * *`), and updating `ALLOWED_ORIGINS` / `CLERK_ALLOWED_ORIGINS` for the future frontend origin.
+> **Verification boundary:** The upstream `Backend` branch documentation records local test and packaging results from its original environment. Its Cloudflare Worker, Hyperdrive, Neon database, Clerk tenant, sender domain, and live endpoint belong to that environment and are **not reused by this `final` branch**. Those live claims are historical and must not be treated as verification of your deployment.
+>
+> Before deployment, replace every account-specific placeholder in `wrangler.toml`, create your own database and Hyperdrive binding, configure your own Clerk instance, and run the test, migration, and live smoke-test steps below. No production deployment has been performed from this branch.
 
----
 
 ## 1. Pre-Deployment Checklist & Configuration
 
@@ -36,9 +34,9 @@ Never commit real secrets into git or `backend/wrangler.toml`. Configure secrets
 | `STUDENT_ALLOWED_EMAIL_DOMAIN` | `"bennett.edu.in"` | Keep as-is |
 | `EMAILS_FROM_EMAIL` | `"noreply@bennett.edu.in"` | Ensure sender/domain is verified in Resend/Brevo (or change to a verified domain) |
 | `EMAILS_FROM_NAME` | `"ATC DSA Roadmap Hub"` | Keep as-is |
-| `CLOUDFLARE_ORIGIN_URL` | `"https://atc-dsa-backend.webatc77.workers.dev"` | Set for `*.workers.dev` |
-| `CLERK_JWKS_URL` | `"https://great-bug-2878.clerk.accounts.dev/.well-known/jwks.json"` | Configured for Clerk dev instance |
-| `CLERK_ISSUER` | `"https://great-bug-2878.clerk.accounts.dev"` | Configured for Clerk dev instance |
+| `CLOUDFLARE_ORIGIN_URL` | `"https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev"` | Set for `*.workers.dev` |
+| `CLERK_JWKS_URL` | `"https://YOUR_CLERK_ISSUER/.well-known/jwks.json"` | Configured for Clerk dev instance |
+| `CLERK_ISSUER` | `"https://YOUR_CLERK_ISSUER"` | Configured for Clerk dev instance |
 | `ALLOWED_ORIGINS` | `"http://localhost:5173"` | Dev localhost active for testing; update with deployed frontend origin(s) before frontend production cutover |
 | `CLERK_ALLOWED_ORIGINS` | `"http://localhost:5173"` | Dev localhost active for Clerk JWT `azp` claim; update with deployed frontend origin(s) before production cutover |
 
@@ -52,7 +50,7 @@ Hyperdrive is already configured in `backend/wrangler.toml`:
 ```toml
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "34e6e006848f46c4b75e382dbfafd02a"
+id = "REPLACE_WITH_YOUR_HYPERDRIVE_ID"
 ```
 - The Cloudflare Hyperdrive config must point to your **Neon pooled or direct PostgreSQL connection string** via Cloudflare Dashboard / `wrangler hyperdrive update` (do not place DB credentials in `wrangler.toml`).
 - Note that Workers Free plan supports up to `100,000` Hyperdrive queries/day.
@@ -79,7 +77,7 @@ Verify revision reaches `003_clerk_auth_policies (head)`.
 1. Open **Clerk Dashboard -> Webhooks -> Add Endpoint**.
 2. Set Endpoint URL:
    ```text
-   https://atc-dsa-backend.webatc77.workers.dev/api/v1/webhooks/clerk
+   https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1/webhooks/clerk
    ```
 3. Subscribe to events:
    - `user.updated`
@@ -180,24 +178,24 @@ Run these checks after replacing placeholders (`ALLOWED_ORIGINS`, `CLERK_ALLOWED
 
 ```powershell
 # 1. Health check (verify status="ok" and auth_mode="clerk")
-Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/health"
+Invoke-RestMethod -Uri "https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/health"
 
 # 2. Versioned health & OpenAPI schema check
-Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/openapi.json" | Select-Object -ExpandProperty info
+Invoke-RestMethod -Uri "https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1/openapi.json" | Select-Object -ExpandProperty info
 
 # 3. Public roadmap read (must return ONLY published items)
-Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/roadmap/topics"
+Invoke-RestMethod -Uri "https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1/roadmap/topics"
 
 # 4. Legacy endpoint check (must return HTTP 410 Gone)
 try {
-  Invoke-RestMethod -Method Post -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/auth/login" -ContentType "application/json" -Body '{"email":"test@bennett.edu.in","password":"password123"}'
+  Invoke-RestMethod -Method Post -Uri "https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1/auth/login" -ContentType "application/json" -Body '{"email":"test@bennett.edu.in","password":"password123"}'
 } catch {
   $_.Exception.Response.StatusCode.value__
 }
 
 # 5. Unauthorized admin guard check (must return HTTP 401)
 try {
-  Invoke-RestMethod -Uri "https://atc-dsa-backend.webatc77.workers.dev/api/v1/dashboard/admin"
+  Invoke-RestMethod -Uri "https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1/dashboard/admin"
 } catch {
   $_.Exception.Response.StatusCode.value__
 }
