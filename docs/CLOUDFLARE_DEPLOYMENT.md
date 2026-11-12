@@ -71,6 +71,7 @@ Add these repository secrets:
 Add this repository variable:
 
 - `VITE_API_BASE_URL`: `https://atc-dsa-final-api.YOUR_WORKERS_SUBDOMAIN.workers.dev/api/v1` (replace with your deployed Worker URL).
+- `VITE_CLERK_PUBLISHABLE_KEY`: the publishable key from your own Clerk production application.
 
 The Pages project must exist before the Pages workflow runs. The Worker name and Hyperdrive ID must be valid before the backend workflow runs.
 

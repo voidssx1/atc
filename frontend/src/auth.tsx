@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { registerSessionTokenUpdater, setApiSessionToken } from "./lib/api";
 
 type ClerkUser = { id: string; fullName?: string | null; primaryEmailAddress?: { emailAddress?: string } | null; imageUrl?: string };
 type ClerkSession = { getToken: () => Promise<string | null> };
@@ -39,9 +40,10 @@ async function initClerk(): Promise<ClerkLike> {
   const domain = atob(encoded.replace(/-/g, "+").replace(/_/g, "/")).replace(/\$$/, "");
   await script("https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js", "clerk-ui");
   await script("https://" + domain + "/npm/@clerk/clerk-js@6/dist/clerk.browser.js", "clerk-js");
-  if (!window.Clerk) throw new Error("Clerk SDK failed to initialize.");
-  await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
-  return window.Clerk;
+  const clerk = window.Clerk;
+  if (!clerk) throw new Error("Clerk SDK failed to initialize.");
+  await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+  return clerk;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -53,9 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [clerk, setClerk] = useState<ClerkLike | null>(null);
 
+  useEffect(() => registerSessionTokenUpdater(setToken), []);
+
   const hydrate = useCallback(async (u?: ClerkUser | null, session?: ClerkSession | null) => {
     setUser(u ?? null);
-    if (!u || !session) { setToken(null); setProfile(null); setRole(null); return; }
+    if (!u || !session) { setToken(null); setApiSessionToken(null); setProfile(null); setRole(null); return; }
     if (!API) { setError("VITE_API_BASE_URL is missing."); return; }
     try {
       const jwt = await session.getToken();
@@ -71,8 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUserResponse = await fetch(API + "/auth/me", { headers: { Authorization: "Bearer " + appToken } });
       const currentUser = await currentUserResponse.json();
       if (!currentUserResponse.ok) throw new Error(currentUser.detail ?? "Could not load account permissions.");
-      setToken(appToken); setProfile(p); setRole(currentUser.role ?? null); setError(null);
-    } catch (e) { setToken(null); setProfile(null); setRole(null); setError(e instanceof Error ? e.message : "Authentication failed."); }
+      setToken(appToken); setApiSessionToken(appToken); setProfile(p); setRole(currentUser.role ?? null); setError(null);
+    } catch (e) { setToken(null); setApiSessionToken(null); setProfile(null); setRole(null); setError(e instanceof Error ? e.message : "Authentication failed."); }
   }, []);
 
   useEffect(() => {
@@ -88,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (token && API) await fetch(API + "/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => undefined);
-    await clerk?.signOut(); setToken(null); setProfile(null); setRole(null);
+    await clerk?.signOut(); setToken(null); setApiSessionToken(null); setProfile(null); setRole(null);
   }, [clerk, token]);
   const refreshProfile = useCallback(async () => {
     if (!token || !API) return;
