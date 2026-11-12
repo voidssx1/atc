@@ -23,12 +23,12 @@ const AuthContext = createContext<AuthState | null>(null);
 const API = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 const KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
-function script(src: string, key: string): Promise<void> {
+function script(src: string, key: string, publishableKey?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const old = document.querySelector<HTMLScriptElement>('script[data-atc="' + key + '"]');
     if (old?.dataset.loaded === "true") return resolve();
     const el = old ?? document.createElement("script");
-    if (!old) { el.src = src; el.async = true; el.crossOrigin = "anonymous"; el.dataset.atc = key; document.head.appendChild(el); }
+    if (!old) { el.src = src; el.async = true; el.crossOrigin = "anonymous"; el.dataset.atc = key; if (publishableKey) el.setAttribute("data-clerk-publishable-key", publishableKey); document.head.appendChild(el); }
     el.addEventListener("load", () => { el.dataset.loaded = "true"; resolve(); }, { once: true });
     el.addEventListener("error", () => reject(new Error("Could not load Clerk. Check your Clerk domain and network.")), { once: true });
   });
@@ -39,7 +39,7 @@ async function initClerk(): Promise<ClerkLike> {
   if (!encoded) throw new Error("Invalid Clerk publishable key.");
   const domain = atob(encoded.replace(/-/g, "+").replace(/_/g, "/")).replace(/\$$/, "");
   await script("https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js", "clerk-ui");
-  await script("https://" + domain + "/npm/@clerk/clerk-js@6/dist/clerk.browser.js", "clerk-js");
+  await script("https://" + domain + "/npm/@clerk/clerk-js@6/dist/clerk.browser.js", "clerk-js", KEY);
   const clerk = window.Clerk;
   if (!clerk) throw new Error("Clerk SDK failed to initialize.");
   await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
