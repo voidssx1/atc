@@ -1,81 +1,53 @@
-name: Temporary Backend Python Packaging Check
+name: ATC Worker packaging verification
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - Backend
+      - final
     paths:
       - "backend/pyproject.toml"
       - "backend/wrangler.toml"
       - "backend/src/**"
       - ".github/workflows/temp-pywrangler-package-check.yml"
 
-jobs:
-  pywrangler-package-check:
-    name: Verify Cloudflare Python Worker Packaging (No Deploy)
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+jobs:
+  package-check:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Backend branch
+      - name: Checkout final branch only
         uses: actions/checkout@v4
         with:
-          ref: Backend
+          ref: final
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - name: Install uv (>= 0.13.4)
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          version: "latest"
+          version: latest
 
-      - name: Verify toolchain versions
-        run: |
-          python --version
-          node -v
-          uv --version
-          python -c "import subprocess, re, sys; out = subprocess.check_output(['uv', '--version'], text=True); m = re.search(r'(\d+\.\d+\.\d+)', out); ver = tuple(int(x) for x in m.group(1).split('.')); assert ver >= (0, 13, 4), f'uv >= 0.13.4 required, got {out}'; print('uv version OK:', m.group(1))"
-
-      - name: Run pywrangler sync inside backend
+      - name: Sync Worker dependencies
         working-directory: backend
-        run: |
-          uvx --from workers-py pywrangler sync
+        run: uvx --from workers-py pywrangler sync
 
-      - name: Inspect generated packaging artifacts
-        if: always()
+      - name: Dry-run Worker bundle
         working-directory: backend
-        run: |
-          echo "=== backend directory ==="
-          ls -la
-          echo "=== generated vendor / module sizes ==="
-          du -sh python_modules .venv-workers 2>/dev/null || true
-          ls -la python_modules 2>/dev/null || true
+        run: npx --yes wrangler deploy --dry-run
 
-      - name: Measure Worker bundle size (dry-run only, no deploy)
-        working-directory: backend
-        run: |
-          DRY_OUT=$(npx --yes wrangler deploy --dry-run 2>&1 | tee /dev/stderr)
-          PM_SIZE=$(du -sh python_modules 2>/dev/null | cut -f1 || echo "none")
-          VW_SIZE=$(du -sh .venv-workers 2>/dev/null | cut -f1 || echo "none")
-          UPLOAD_LINE=$(echo "$DRY_OUT" | grep -E "Total Upload:" | tail -n1 || echo "none")
-          TOTAL_LINE=$(echo "$DRY_OUT" | grep -E "Total \([0-9]+ modules?\)" | tail -n1 || echo "none")
-          VENDOR_LINE=$(echo "$DRY_OUT" | grep -E "Vendored Modules" | tail -n1 || echo "none")
-          HAS_VENV=$(echo "$DRY_OUT" | grep -q "\.venv-workers" && echo "YES" || echo "NO")
-          echo "::notice title=Bundle Metrics::python_modules=$PM_SIZE | .venv-workers=$VW_SIZE | has_venv_in_bundle=$HAS_VENV | $VENDOR_LINE | $TOTAL_LINE | $UPLOAD_LINE"
-
-      - name: Upload packaged artifacts for inspection
+      - name: Upload packaging artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-python-worker-package
+          name: atc-final-worker-package
           retention-days: 7
           if-no-files-found: warn
           path: |
