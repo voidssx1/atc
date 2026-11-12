@@ -191,6 +191,12 @@ def _issue_application_session(
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+@router.get("/me", response_model=UserResponse)
+def get_authenticated_user(current_user: User = Depends(get_current_user)):
+    """Return the current application user, including the authorization role."""
+    return current_user
+
+
 @router.post("/clerk/exchange", response_model=Token)
 async def exchange_clerk_token(
     request: Request,

@@ -1,545 +1,80 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import './App.css';
-import cardIllustrations from './assets/card-illustrations.png';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useAuth } from "./auth";
+import { apiRequest, ApiError } from "./lib/api";
+import LandingPage from "./LandingPage";
+import "./portal.css";
 
-// ─── Nav items ───────────────────────────────────────────────
-const NAV_ITEMS = [
-  { label: 'HOME', hash: '#home' },
-  { label: 'EVENTS', hash: '#events' },
-  { label: 'PROJECTS', hash: '#projects' },
-  { label: 'TEAM', hash: '#team' },
-  { label: 'RESOURCES', hash: '#resources' },
-] as const;
-
-const SECOND_PAGE_CARDS = [
-  { title: 'JOIN', artwork: 'join' },
-  { title: 'RESOURCES', artwork: 'resources' },
-  { title: 'TEAM', artwork: 'team' },
-  { title: 'GALLERY', artwork: 'gallery' },
-  { title: 'EVENTS', artwork: 'events' },
-] as const;
-
-// ─── Theme helpers ────────────────────────────────────────────
-type Theme = 'light' | 'dark';
-const STORAGE_KEY = 'atc-theme';
-
-function getInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'light';
-  const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
-  if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+type Page = "overview"|"roadmap"|"resources"|"bookmarks"|"events"|"projects"|"gallery"|"profile"|"admin"|"users"|"drafts"|"community-admin"|"website";
+type Topic = {id:string;title:string;description?:string;subtopics:Subtopic[]};
+type Subtopic = {id:string;title:string;description?:string;difficulty:string;children?:Subtopic[]};
+type Resource = {id:string;title:string;url:string;resource_type:string;difficulty:string;availability_status:string};
+type Bookmark = {id:string;resource_id:string;resource?:Resource};
+type Dashboard = {total_topics:number;total_subtopics:number;completed_subtopics:number;in_progress_subtopics:number;completion_percentage:number;total_bookmarks:number;recent_bookmarks:Bookmark[]};
+type Community = {id:string;kind:string;title:string;slug:string;description?:string;image_url?:string;external_url?:string;location?:string;starts_at?:string;is_published:boolean};
+type UserRecord = {id:string;email:string;username?:string;role:string;is_active:boolean};
+type Draft = {id:string;title:string;entity_type:string;status:string;review_feedback?:string};
+const studentLinks:[Page,string][]=[["overview","Overview"],["roadmap","DSA roadmap"],["resources","Resources"],["bookmarks","Bookmarks"],["events","Events"],["projects","Projects"],["gallery","Gallery"]];
+const adminLinks:[Page,string][]=[["admin","Admin overview"],["users","User management"],["drafts","Content review"],["community-admin","Community content"]];
+const adminRoles=["tech_admin","content_admin","viewer"];
+const err=(e:unknown)=>e instanceof ApiError?e.message:e instanceof Error?e.message:"Request failed.";
+function Title({label,title,description}:{label:string;title:string;description:string}){return <header className="page-title"><small>{label}</small><h1>{title}</h1><p>{description}</p></header>}
+function ErrorBox({value}:{value:string}){return value?<p className="error-box" role="alert">{value}</p>:null}
+function Empty({title,description}:{title:string;description:string}){return <div className="empty"><b>{title}</b><p>{description}</p></div>}
+function Stat({label,value}:{label:string;value:string|number}){return <div className="stat"><small>{label}</small><strong>{value}</strong></div>}
+function SignIn(){const a=useAuth();return <main className="login-screen"><div className="login-content"><small>ALAN TURING CLUB · BENNETT UNIVERSITY</small><h1>Build your<br/><i>next milestone.</i></h1><p>Your DSA roadmap, progress, resources and club community in one workspace.</p><div className="login-actions"><button className="btn primary" disabled={!a.ready||!a.configured} onClick={a.signIn}>Sign in</button><button className="btn ghost" disabled={!a.ready||!a.configured} onClick={a.signUp}>Create account</button></div>{!a.ready&&<p>Loading secure sign-in…</p>}{!a.configured&&<ErrorBox value="Configure VITE_CLERK_PUBLISHABLE_KEY and VITE_API_BASE_URL."/>}<ErrorBox value={a.error??""}/><small>Student access requires a verified @bennett.edu.in email.</small></div><div className="login-orbit"><b>ATC<span>/</span>DSA</b><small>LEARN · BUILD · SHIP</small></div></main>}
+function DashboardView({data,name,go}:{data:Dashboard|null;name:string;go:(p:Page)=>void}){
+ return <><div className="welcome-row"><div><small>YOUR WORKSPACE</small><h1>Good to have you, {name.split(" ")[0]}.</h1><p>Pick up where you left off.</p></div><button className="btn primary" onClick={()=>go("roadmap")}>Continue roadmap ↗</button></div>
+ <div className="stats">{[["TOPICS",data?.total_topics],["COMPLETED",data?.completed_subtopics],["IN PROGRESS",data?.in_progress_subtopics],["BOOKMARKS",data?.total_bookmarks]].map(([k,v])=><Stat key={String(k)} label={String(k)} value={v??"—"}/>)}</div>
+ <section className="panel"><div className="panel-head"><div><small>YOUR PROGRESS</small><h2>DSA completion</h2></div><b>{data?.completion_percentage??0}%</b></div><div className="progress"><span style={{width:(data?.completion_percentage??0)+"%"}}/></div><p>{data?.completed_subtopics??0} of {data?.total_subtopics??0} subtopics completed</p></section>
+ <h2 className="section-title">Quick access</h2><div className="quick-links">{[["roadmap","DSA roadmap","Follow your learning path"],["resources","Resources","Curated learning material"],["bookmarks","Bookmarks","Your saved resources"],["events","Club events","Meet the community"]].map(([p,t,d])=><button className="quick" key={p} onClick={()=>go(p as Page)}><b>{t}</b><small>{d}</small><span>↗</span></button>)}</div>
+ <section className="panel"><div className="panel-head"><h2>Recently bookmarked</h2><button className="link-btn" onClick={()=>go("bookmarks")}>View all ↗</button></div>{data?.recent_bookmarks?.length?data.recent_bookmarks.map(x=><div className="row" key={x.id}><b>{x.resource?.title??"Resource"}</b><a href={x.resource?.url} target="_blank" rel="noreferrer">Open ↗</a></div>):<Empty title="Nothing saved yet" description="Bookmark resources to build your reading list."/>}</section></>;
 }
-
-// ─── Theme icon (hoisted outside App to satisfy lint) ─────────
-function ThemeIcon({ theme }: { theme: Theme }) {
-  return theme === 'dark' ? (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5" />
-      <line x1="12" y1="1" x2="12" y2="3" />
-      <line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" />
-      <line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  );
+function Roadmap({token}:{token:string}){
+ const [topics,setTopics]=useState<Topic[]>([]);const [progress,setProgress]=useState<Record<string,string>>({});const [error,setError]=useState("");
+ const load=useCallback(async()=>{try{const [t,p]=await Promise.all([apiRequest<Topic[]>("roadmap/topics"),apiRequest<{subtopic_id:string;status:string}[]>("progress/",{token})]);setTopics(t);setProgress(Object.fromEntries(p.map(x=>[x.subtopic_id,x.status])));setError("");}catch(e){setError(err(e));}},[token]);
+ useEffect(()=>{void load()},[load]);
+ const update=async(id:string,status:string)=>{try{if(status==="not_started")await apiRequest("progress/"+id,{method:"DELETE",token});else await apiRequest("progress/"+id,{method:"POST",token,body:JSON.stringify({status})});setProgress(v=>({...v,[id]:status==="not_started"?"":status}));}catch(e){setError(err(e));}};
+ const node=(s:Subtopic,depth=0):ReactNode=><div className="subtopic" key={s.id} style={{marginLeft:depth*16}}><div><b>{s.title}</b><small>{s.difficulty}{s.description?" · "+s.description:""}</small></div><select value={progress[s.id]||"not_started"} onChange={e=>void update(s.id,e.target.value)}><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select>{s.children?.map(x=>node(x,depth+1))}</div>;
+ return <><Title label="LEARNING PATH" title="DSA roadmap" description="Complete topics and save your progress as you learn."/><ErrorBox value={error}/>{topics.map(t=><section className="panel" key={t.id}><h2>{t.title}</h2><p>{t.description}</p>{t.subtopics?.map(s=>node(s))}</section>)}{!topics.length&&!error&&<Empty title="No roadmap topics yet" description="Published topics will appear here."/>}</>;
 }
-
-// ─── Stylized A / Lambda glyph (Source of truth for all brand A letters) ─
-function StylizedA({ className = 'lambda-glyph' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 100 88" className={className} aria-hidden="true">
-      <polygon points="40,0 60,0 96,87 72,87 50,22 28,87 4,87" fill="currentColor" />
-      <polygon points="12,65 31,65 24,75 5,75" fill="currentColor" />
-    </svg>
-  );
+function Resources({token}:{token:string}){
+ const [items,setItems]=useState<Resource[]>([]);const [saved,setSaved]=useState<string[]>([]);const [filter,setFilter]=useState("all");const [error,setError]=useState("");
+ const load=useCallback(async()=>{try{const [r,b]=await Promise.all([apiRequest<Resource[]>("resources/"),apiRequest<Bookmark[]>("bookmarks/",{token})]);setItems(r);setSaved(b.map(x=>x.resource_id));}catch(e){setError(err(e));}},[token]);useEffect(()=>{void load()},[load]);
+ const toggle=async(id:string)=>{try{if(saved.includes(id))await apiRequest("bookmarks/"+id,{method:"DELETE",token});else await apiRequest("bookmarks/",{method:"POST",token,body:JSON.stringify({resource_id:id})});setSaved(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}catch(e){setError(err(e));}};
+ const visible=filter==="all"?items:items.filter(x=>x.resource_type===filter);
+ return <><Title label="LIBRARY" title="Resources" description="Curated material for concepts, practice and interview preparation."/><ErrorBox value={error}/><div className="toolbar"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All types</option>{Array.from(new Set(items.map(x=>x.resource_type))).map(x=><option key={x}>{x}</option>)}</select><small>{visible.length} resources</small></div><div className="cards">{visible.map(x=><article className="resource" key={x.id}><small>{x.resource_type} · {x.difficulty}</small><h3>{x.title}</h3><p>{x.availability_status}</p><div className="row"><a href={x.url} target="_blank" rel="noreferrer">Open ↗</a><button className="btn ghost" onClick={()=>void toggle(x.id)}>{saved.includes(x.id)?"Saved ✓":"Bookmark +"}</button></div></article>)}</div>{!visible.length&&<Empty title="No resources" description="The club has not published resources here yet."/>}</>;
 }
-
-// ─── BrandText: replaces every uppercase A with the stylized glyph ──────────
-function BrandText({ children }: { children: string }) {
-  if (!children.includes('A')) return <>{children}</>;
-  const parts = children.split('A');
-  return (
-    <span aria-label={children}>
-      {parts.map((part, i) => (
-        <span key={i}>
-          {part}
-          {i < parts.length - 1 && (
-            <span className="brand-stylized-a" aria-hidden="true">
-              <StylizedA />
-            </span>
-          )}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function CardArtwork({ kind }: { kind: (typeof SECOND_PAGE_CARDS)[number]['artwork'] }) {
-  const crops = {
-    join: '67 66 410 410',
-    resources: '542 63 450 450',
-    team: '1045 65 440 440',
-    gallery: '264 520 440 440',
-    events: '820 505 490 490',
-  } as const;
-
-  return (
-    <div className={`card-art-stage artwork-${kind}`}>
-      <div className="artwork-halo" aria-hidden="true" />
-      <svg className="card-artwork" viewBox={crops[kind]} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <image className="card-source-image" href={cardIllustrations} x="0" y="0" width="1536" height="1024" />
-      </svg>
-    </div>
-  );
-}
-
-function updateCardGlow(event: ReactPointerEvent<HTMLElement>) {
-  if (event.pointerType === 'touch') return;
-  const bounds = event.currentTarget.getBoundingClientRect();
-  const x = (event.clientX - bounds.left) / bounds.width;
-  const y = (event.clientY - bounds.top) / bounds.height;
-  event.currentTarget.style.setProperty('--pointer-x', `${x * bounds.width}px`);
-  event.currentTarget.style.setProperty('--pointer-y', `${y * bounds.height}px`);
-  event.currentTarget.style.setProperty('--tilt-x', `${((0.5 - y) * 12).toFixed(2)}deg`);
-  event.currentTarget.style.setProperty('--tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`);
-}
-
-function resetCardTilt(event: ReactPointerEvent<HTMLElement>) {
-  event.currentTarget.style.setProperty('--tilt-x', '0deg');
-  event.currentTarget.style.setProperty('--tilt-y', '0deg');
-}
-
-// ─── Component ────────────────────────────────────────────────
-export default function App() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cardsSectionRef = useRef<HTMLElement>(null);
-
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [activeHash, setActiveHash] = useState<string>(() => window.location.hash || '#home');
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  // 4×4 plus-sign grid in upper-right
-  const plusCols = [1422, 1475, 1528, 1580];
-  const plusRows = [166, 216, 267, 319];
-
-  // Lower-left subtle dotted grid
-  const dotCols: number[] = [];
-  for (let x = 12; x <= 270; x += 15.2) dotCols.push(x);
-  const dotRows: number[] = [];
-  for (let y = 680; y <= 918; y += 15.2) dotRows.push(y);
-
-  // Cards section corner decorative grids
-  const cardsDotCols: number[] = [];
-  for (let x = 40; x <= 280; x += 18) cardsDotCols.push(x);
-  const cardsDotRows: number[] = [];
-  for (let y = 720; y <= 940; y += 18) cardsDotRows.push(y);
-
-  // ── Apply theme to <html> and persist ──────────────────────
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.setAttribute('data-theme', 'dark');
-    } else {
-      root.removeAttribute('data-theme');
-    }
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
-
-  // ── Lock body scroll when menu is open ─────────────────────
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [menuOpen]);
-
-  // ── Active nav: hashchange + popstate ──────────────────────
-  useEffect(() => {
-    const syncHash = () => setActiveHash(window.location.hash || '#home');
-
-    window.addEventListener('hashchange', syncHash);
-    window.addEventListener('popstate', syncHash);
-
-    const sectionIds = NAV_ITEMS.map((n) => n.hash.replace('#', ''));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActiveHash(`#${entry.target.id}`);
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    sectionIds.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-
-    return () => {
-      window.removeEventListener('hashchange', syncHash);
-      window.removeEventListener('popstate', syncHash);
-      observer.disconnect();
-    };
-  }, []);
-
-  // ── Inertial mouse parallax loop (desktop only) ────────────
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (mediaQuery.matches) return;
-    if (window.matchMedia('(pointer: coarse)').matches) return;
-
-    let targetMouseX = 0;
-    let targetMouseY = 0;
-    let currentMouseX = 0;
-    let currentMouseY = 0;
-    let animId: number;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      targetMouseX = (e.clientX / window.innerWidth) * 2 - 1;
-      targetMouseY = (e.clientY / window.innerHeight) * 2 - 1;
-    };
-    const handleMouseLeave = () => {
-      targetMouseX = 0;
-      targetMouseY = 0;
-    };
-
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    window.addEventListener('mouseleave', handleMouseLeave);
-
-    const lerp = (s: number, e: number, f: number) => s + (e - s) * f;
-
-    const tick = () => {
-      currentMouseX = lerp(currentMouseX, targetMouseX, 0.04);
-      currentMouseY = lerp(currentMouseY, targetMouseY, 0.04);
-
-      if (containerRef.current) {
-        containerRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-grid-x', `${(currentMouseX * -6).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-grid-y', `${(currentMouseY * -6).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
-        containerRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
-      }
-
-      if (cardsSectionRef.current) {
-        cardsSectionRef.current.style.setProperty('--shift-circles-x', `${(currentMouseX * 12).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-circles-y', `${(currentMouseY * 12).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-grid-x', `${(currentMouseX * -6).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-grid-y', `${(currentMouseY * -6).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-crosshair-x', `${(currentMouseX * 8).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-crosshair-y', `${(currentMouseY * 8).toFixed(2)}px`);
-        cardsSectionRef.current.style.setProperty('--shift-orbit-tilt-x', `${(currentMouseY * -5).toFixed(2)}deg`);
-        cardsSectionRef.current.style.setProperty('--shift-orbit-tilt-y', `${(currentMouseX * 5).toFixed(2)}deg`);
-      }
-      animId = requestAnimationFrame(tick);
-    };
-
-    animId = requestAnimationFrame(tick);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseleave', handleMouseLeave);
-      cancelAnimationFrame(animId);
-    };
-  }, []);
-
-  const handleNavClick = (hash: string) => {
-    setActiveHash(hash);
-    setMenuOpen(false);
-  };
-
-
-  return (
-    <div className="site-pages">
-      <div className="landing-container" ref={containerRef} id="home">
-
-        {/* ── Background Geometry ──────────────────────────────── */}
-        <svg
-          className="geometric-background"
-          viewBox="0 0 1648 928"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="xMidYMid slice"
-          aria-hidden="true"
-        >
-          <defs>
-            <style>{`
-            .svg-line   { stroke: var(--line);       }
-            .svg-circle { stroke: var(--line);       }
-            .svg-dot    { fill:   var(--dot);        }
-            .svg-plus   { stroke: var(--plus);       }
-            .svg-ch     { stroke: var(--crosshair);  }
-            .svg-bar    { fill:   var(--bar);        }
-            .svg-cfill  { fill:   var(--circle-fill);}
-          `}</style>
-          </defs>
-
-          {/* Static Construction Lines */}
-          <g className="geo-static-lines">
-            <line className="svg-line geo-line-h" x1="0" y1="502" x2="1648" y2="502" strokeWidth="1" />
-            <line className="svg-line geo-line-v" x1="1162" y1="60" x2="1162" y2="885" strokeWidth="1" />
-            <line className="svg-line geo-line-v-sub" x1="55" y1="10" x2="55" y2="180" strokeWidth="1" />
-          </g>
-
-          {/* Interactive / Animated Circles */}
-          <g className="geo-interactive-circles">
-            {/* Outer circle: cx=1162, cy=502, r=462 */}
-            <g className="geo-circle-outer">
-              <g className="geo-float-outer">
-                <circle className="svg-cfill" cx="1162" cy="502" r="462" stroke="none" opacity="0.32" />
-                <circle className="svg-circle" cx="1162" cy="502" r="462" strokeWidth="1" />
-              </g>
-            </g>
-
-            {/* Orbital circle: cx=1015, cy=482, r=373 */}
-            <g className="geo-circle-orbital">
-              <g className="geo-float-orbital">
-                <circle className="svg-circle" cx="1015" cy="482" r="373" strokeWidth="1" />
-              </g>
-            </g>
-
-            {/* Inner circle: cx=1162, cy=502, r=236 */}
-            <g className="geo-circle-inner">
-              <g className="geo-float-inner">
-                <circle className="svg-circle" cx="1162" cy="502" r="236" strokeWidth="1" />
-              </g>
-            </g>
-
-            {/* Large sweeping circle: cx=254, cy=712, r=729 */}
-            <g className="geo-circle-sweep">
-              <g className="geo-float-sweep">
-                <circle className="svg-circle" cx="254" cy="712" r="729" strokeWidth="1" />
-              </g>
-            </g>
-          </g>
-
-          {/* Markers */}
-          <rect className="svg-bar geo-center-marker" x="1159" y="499" width="6" height="6" />
-          <rect className="svg-bar geo-edge-bar geo-left-bar" x="54" y="340" width="30" height="9" rx="1.5" />
-          <rect className="svg-bar geo-edge-bar geo-right-bar" x="1560" y="658" width="28" height="9" rx="1.5" />
-
-          {/* Crosshairs */}
-          <g className="geo-crosshairs">
-            <g className="crosshair-marker crosshair-ul">
-              <line className="svg-ch" x1="68" y1="125" x2="100" y2="125" strokeWidth="1.2" />
-              <line className="svg-ch" x1="84" y1="107" x2="84" y2="143" strokeWidth="1.2" />
-            </g>
-            <g className="crosshair-marker crosshair-lr">
-              <line className="svg-ch" x1="1527" y1="847" x2="1563" y2="847" strokeWidth="1.2" />
-              <line className="svg-ch" x1="1545" y1="825" x2="1545" y2="869" strokeWidth="1.2" />
-            </g>
-          </g>
-
-          {/* Grids */}
-          <g className="geo-grids">
-            <g className="plus-grid">
-              {plusRows.map((py, ri) =>
-                plusCols.map((px, ci) => (
-                  <g key={`plus-${ri}-${ci}`} className="plus-mark">
-                    <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
-                    <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
-                  </g>
-                ))
-              )}
-            </g>
-            <g className="dot-grid">
-              {dotRows.map((dy, rIndex) =>
-                dotCols.map((dx, cIndex) => {
-                  const colRatio = (dx - 12) / (270 - 12);
-                  const rowRatio = (dy - 680) / (918 - 680);
-                  const op = Math.max(0.15, 0.82 - colRatio * 0.45 - (1 - rowRatio) * 0.35);
-                  return (
-                    <circle key={`dot-${rIndex}-${cIndex}`} className="svg-dot grid-dot" cx={dx} cy={dy} r="1.4" opacity={op} />
-                  );
-                })
-              )}
-            </g>
-          </g>
-        </svg>
-
-        {/* ── Header ──────────────────────────────────────────── */}
-        <header className="site-header">
-          <div className="header-logo">
-            <span className="logo-text">
-              <span className="logo-stylized-a" aria-hidden="true">
-                <StylizedA />
-              </span>
-              <span className="sr-only">A</span>TC
-            </span>
-          </div>
-
-          {/* Desktop nav */}
-          <nav className="header-nav" aria-label="Main Navigation">
-            {NAV_ITEMS.map(({ label, hash }) => {
-              const isActive = activeHash === hash;
-              return (
-                <div key={hash} className={`nav-item${isActive ? ' active' : ''}`}>
-                  <a href={hash} onClick={() => handleNavClick(hash)}><BrandText>{label}</BrandText></a>
-                  {isActive ? <div className="nav-underline" /> : <div className="nav-hover-line" />}
-                </div>
-              );
-            })}
-            <button
-              className="theme-toggle"
-              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            >
-              <ThemeIcon theme={theme} />
-            </button>
-          </nav>
-
-          {/* Mobile controls: theme toggle + hamburger */}
-          <div className="mobile-controls">
-            <button
-              className="theme-toggle"
-              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            >
-              <ThemeIcon theme={theme} />
-            </button>
-            <button
-              className="hamburger"
-              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              {/* Three bars → X morphing via CSS */}
-              <span className={`ham-bar ham-bar-1${menuOpen ? ' open' : ''}`} />
-              <span className={`ham-bar ham-bar-2${menuOpen ? ' open' : ''}`} />
-              <span className={`ham-bar ham-bar-3${menuOpen ? ' open' : ''}`} />
-            </button>
-          </div>
-        </header>
-
-        {/* ── Mobile nav drawer ───────────────────────────────── */}
-        <div
-          className={`mobile-nav-overlay${menuOpen ? ' open' : ''}`}
-          onClick={() => setMenuOpen(false)}
-          aria-hidden={!menuOpen}
-        />
-        <nav
-          className={`mobile-nav-drawer${menuOpen ? ' open' : ''}`}
-          aria-label="Mobile Navigation"
-        >
-          {NAV_ITEMS.map(({ label, hash }) => {
-            const isActive = activeHash === hash;
-            return (
-              <a
-                key={hash}
-                href={hash}
-                className={`mobile-nav-item${isActive ? ' active' : ''}`}
-                onClick={() => handleNavClick(hash)}
-              >
-                <BrandText>{label}</BrandText>
-              </a>
-            );
-          })}
-        </nav>
-
-        {/* ── Hero ────────────────────────────────────────────── */}
-        <main className="hero-content">
-          <div className="title-lockup">
-            <h1 className="main-title">
-              <span className="title-row title-row-1">
-                <span className="letter-stylized-a" aria-hidden="true">
-                  <StylizedA />
-                </span>
-                <span className="sr-only">A</span>
-                <span>L</span>
-                <span className="letter-stylized-a letter-stylized-a-second" aria-hidden="true">
-                  <StylizedA />
-                </span>
-                <span className="sr-only">A</span>
-                <span>N</span>
-              </span>
-              <span className="title-row title-row-2">TURING</span>
-            </h1>
-            <div className="title-sub">
-              <span>C</span>
-              <span>L</span>
-              <span>U</span>
-              <span>B</span>
-            </div>
-          </div>
-        </main>
-      </div>
-      <section className="blank-page" ref={cardsSectionRef} aria-label="Explore the Alan Turing Club">
-        {/* ── Cards Section Geometric Background ──────────────── */}
-        <div className="cards-geo-container" aria-hidden="true">
-          {/* Corner Decorative Accents */}
-          <svg
-            className="cards-geo-backdrop"
-            viewBox="0 0 1600 1000"
-            preserveAspectRatio="xMidYMid slice"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {/* Top-Right Plus Grid */}
-            <g className="cards-plus-grid" opacity="0.55">
-              {[70, 118, 166, 214, 262].map((py, ri) =>
-                [1360, 1408, 1456, 1504, 1552].map((px, ci) => (
-                  <g key={`cplus-${ri}-${ci}`}>
-                    <line className="svg-plus" x1={px - 4} y1={py} x2={px + 4} y2={py} strokeWidth="1.2" />
-                    <line className="svg-plus" x1={px} y1={py - 4} x2={px} y2={py + 4} strokeWidth="1.2" />
-                  </g>
-                ))
-              )}
-            </g>
-
-            {/* Bottom-Left Dot Grid */}
-            <g className="cards-dot-grid">
-              {cardsDotRows.map((dy, rIndex) =>
-                cardsDotCols.map((dx, cIndex) => {
-                  const colRatio = (dx - 40) / (280 - 40);
-                  const rowRatio = (dy - 720) / (940 - 720);
-                  const op = Math.max(0.12, 0.68 - colRatio * 0.42 - (1 - rowRatio) * 0.3);
-                  return (
-                    <circle key={`cdot-${rIndex}-${cIndex}`} className="svg-dot" cx={dx} cy={dy} r="1.3" opacity={op} />
-                  );
-                })
-              )}
-            </g>
-          </svg>
-
-          {/* 3D Rotating Sphere / Orbital Structure */}
-          <div className="cards-geo-scene">
-            <div className="cards-geo-rig">
-              {/* Primary Outer Ring */}
-              <div className="cards-geo-ring cards-ring-outer" />
-
-              {/* Orbital Meridian Rings */}
-              <div className="cards-geo-ring cards-ring-orbit-1" />
-              <div className="cards-geo-ring cards-ring-orbit-2" />
-              <div className="cards-geo-ring cards-ring-orbit-3" />
-              <div className="cards-geo-ring cards-ring-equator" />
-
-              {/* Inner Concentric 3D Rig */}
-              <div className="cards-geo-inner-rig">
-                <div className="cards-geo-ring cards-ring-inner" />
-                <div className="cards-geo-ring cards-ring-inner-orbit" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="second-page-grid">
-          {SECOND_PAGE_CARDS.map(({ title, artwork }) => (
-            <article
-              className="landing-card"
-              key={title}
-              onPointerMove={updateCardGlow}
-              onPointerLeave={resetCardTilt}
-            >
-              <CardArtwork kind={artwork} />
-              <h2><BrandText>{title}</BrandText></h2>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+function Bookmarks({token}:{token:string}){const [items,setItems]=useState<Bookmark[]>([]);const [error,setError]=useState("");const load=useCallback(()=>apiRequest<Bookmark[]>("bookmarks/",{token}).then(setItems).catch(e=>setError(err(e))),[token]);useEffect(()=>{void load()},[load]);const remove=async(id:string)=>{try{await apiRequest("bookmarks/"+id,{method:"DELETE",token});setItems(v=>v.filter(x=>x.resource_id!==id));}catch(e){setError(err(e));}};return <><Title label="YOUR LIBRARY" title="Bookmarks" description="Resources saved to your account."/><ErrorBox value={error}/>{items.map(x=><div className="panel row" key={x.id}><b>{x.resource?.title??x.resource_id}</b><a href={x.resource?.url} target="_blank" rel="noreferrer">Open ↗</a><button className="link-btn" onClick={()=>void remove(x.resource_id)}>Remove</button></div>)}{!items.length&&<Empty title="No bookmarks" description="Save resources from the Resources page."/>}</>}
+function CommunityPage({kind}:{kind:"events"|"projects"|"gallery"}){const [items,setItems]=useState<Community[]>([]);const [error,setError]=useState("");useEffect(()=>{apiRequest<Community[]>("community/"+kind).then(setItems).catch(e=>setError(err(e)))},[kind]);const title=kind[0].toUpperCase()+kind.slice(1);return <><Title label="ATC COMMUNITY" title={title} description={kind==="events"?"Workshops, sessions and club meetups.":kind==="projects"?"Things the community is building.":"Moments from the club."}/><ErrorBox value={error}/><div className="cards">{items.map(x=><article className="resource" key={x.id}>{x.image_url&&<img src={x.image_url} alt={x.title}/>}<small>{x.location??kind}</small><h3>{x.title}</h3><p>{x.description}</p>{x.starts_at&&<p>{new Date(x.starts_at).toLocaleString()}</p>}{x.external_url&&<a href={x.external_url} target="_blank" rel="noreferrer">Learn more ↗</a>}</article>)}</div>{!items.length&&!error&&<Empty title={"No "+kind+" published"} description="Check back for updates from the club."/>}</>}
+function Profile({token,name,email,refresh}:{token:string;name:string;email:string;refresh:()=>Promise<void>}){const [fullName,setFullName]=useState(name);const [notice,setNotice]=useState("");const save=async(e:FormEvent)=>{e.preventDefault();try{await apiRequest("profile/me",{method:"PUT",token,body:JSON.stringify({full_name:fullName})});await refresh();setNotice("Profile saved.");}catch(e){setNotice(err(e));}};return <><Title label="ACCOUNT" title="Your profile" description="Update the profile details attached to your account."/><form className="panel form" onSubmit={save}><label>Email<input value={email} disabled/></label><label>Full name<input value={fullName} onChange={e=>setFullName(e.target.value)} required minLength={2}/></label><button className="btn primary">Save profile</button><p>{notice}</p></form></>}
+function AdminOverview({token}:{token:string}){const [d,setD]=useState<Record<string,unknown>>({});const [error,setError]=useState("");useEffect(()=>{apiRequest<Record<string,unknown>>("dashboard/admin",{token}).then(setD).catch(e=>setError(err(e)))},[token]);const keys=["total_students","total_admins","total_topics","total_subtopics","total_resources","pending_drafts","broken_resources","degraded_resources"];return <><Title label="ADMINISTRATION" title="Control room" description="Platform metrics and content operations."/><ErrorBox value={error}/><div className="stats">{keys.map(k=><Stat key={k} label={k.replaceAll("_"," ")} value={String(d[k]??"—")}/>)}</div></>}
+function UsersAdmin({token}:{token:string}){const [users,setUsers]=useState<UserRecord[]>([]);const [search,setSearch]=useState("");const [error,setError]=useState("");const load=useCallback(()=>apiRequest<UserRecord[]>("admin/users/?limit=100",{token}).then(setUsers).catch(e=>setError(err(e))),[token]);useEffect(()=>{void load()},[load]);const change=async(id:string,kind:"role"|"status",v:string|boolean)=>{try{await apiRequest("admin/users/"+id+"/"+kind,{method:"PATCH",token,body:JSON.stringify(kind==="role"?{role:v}:{is_active:v})});await load();}catch(e){setError(err(e));}};const filtered=users.filter(u=>u.email.toLowerCase().includes(search.toLowerCase()));return <><Title label="ADMINISTRATION" title="User management" description="Manage roles and account status."/><ErrorBox value={error}/><input placeholder="Search by email" value={search} onChange={e=>setSearch(e.target.value)}/><section className="panel table-scroll"><table><thead><tr><th>ACCOUNT</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>{filtered.map(u=><tr key={u.id}><td>{u.username??u.email}<small>{u.email}</small></td><td><select value={u.role} onChange={e=>void change(u.id,"role",e.target.value)}><option value="student">Student</option><option value="content_admin">Content admin</option><option value="viewer">Viewer</option><option value="tech_admin">Tech admin</option></select></td><td><button className="link-btn" onClick={()=>void change(u.id,"status",!u.is_active)}>{u.is_active?"Active":"Disabled"}</button></td></tr>)}</tbody></table></section></>}
+function DraftsAdmin({token}:{token:string}){const [items,setItems]=useState<Draft[]>([]);const [error,setError]=useState("");const load=useCallback(()=>apiRequest<Draft[]>("drafts/?limit=100",{token}).then(setItems).catch(e=>setError(err(e))),[token]);useEffect(()=>{void load()},[load]);const action=async(id:string,a:"approve"|"reject"|"publish")=>{try{await apiRequest("drafts/"+id+"/"+a,{method:"POST",token,body:a==="reject"?JSON.stringify({feedback:"Please revise this submission."}):undefined});await load();}catch(e){setError(err(e));}};return <><Title label="ADMINISTRATION" title="Content review" description="Approve, reject and publish content submissions."/><ErrorBox value={error}/>{items.map(x=><div className="panel row" key={x.id}><div><b>{x.title}</b><small>{x.entity_type} · {x.status}</small></div>{x.status==="pending_approval"&&<><button className="btn ghost" onClick={()=>void action(x.id,"reject")}>Reject</button><button className="btn primary" onClick={()=>void action(x.id,"approve")}>Approve</button></>}{x.status==="approved"&&<button className="btn primary" onClick={()=>void action(x.id,"publish")}>Publish</button>}</div>)}{!items.length&&<Empty title="No drafts" description="Submitted content will appear here."/>}</>}
+function CommunityAdmin({token}:{token:string}){const [kind,setKind]=useState<"events"|"projects"|"gallery">("events");const [items,setItems]=useState<Community[]>([]);const [title,setTitle]=useState("");const [slug,setSlug]=useState("");const [description,setDescription]=useState("");const [image,setImage]=useState("");const [external,setExternal]=useState("");const [location,setLocation]=useState("");const [error,setError]=useState("");const load=useCallback(()=>apiRequest<Community[]>("community/"+kind+"?include_unpublished=true",{token}).then(setItems).catch(e=>setError(err(e))),[kind,token]);useEffect(()=>{void load()},[load]);const create=async(e:FormEvent)=>{e.preventDefault();try{await apiRequest("community/",{method:"POST",token,body:JSON.stringify({kind,title,slug,description,image_url:image||null,external_url:external||null,location:location||null,is_published:false})});setTitle("");setSlug("");setDescription("");setImage("");setExternal("");setLocation("");await load();}catch(e){setError(err(e));}};const publish=async(x:Community)=>{try{await apiRequest("community/"+x.id,{method:"PATCH",token,body:JSON.stringify({is_published:!x.is_published})});await load();}catch(e){setError(err(e));}};const archive=async(id:string)=>{try{await apiRequest("community/"+id,{method:"DELETE",token});await load();}catch(e){setError(err(e));}};return <><Title label="ADMINISTRATION" title="Community content" description="Create and publish events, projects and gallery items."/><ErrorBox value={error}/><section className="panel form"><h2>Create content</h2><select value={kind} onChange={e=>setKind(e.target.value as typeof kind)}><option value="events">Event</option><option value="projects">Project</option><option value="gallery">Gallery</option></select><form onSubmit={create}><label>Title<input required value={title} onChange={e=>{setTitle(e.target.value);setSlug(e.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""));}}/></label><label>Slug<input required value={slug} onChange={e=>setSlug(e.target.value)}/></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)}/></label><label>Image URL<input type="url" value={image} onChange={e=>setImage(e.target.value)}/></label><label>External URL<input type="url" value={external} onChange={e=>setExternal(e.target.value)}/></label><label>Location<input value={location} onChange={e=>setLocation(e.target.value)}/></label><button className="btn primary">Create unpublished item</button></form></section><h2 className="section-title">Existing items</h2>{items.map(x=><div className="panel row" key={x.id}><div><b>{x.title}</b><small>{x.slug} · {x.is_published?"Published":"Unpublished"}</small></div><button className="btn ghost" onClick={()=>void publish(x)}>{x.is_published?"Unpublish":"Publish"}</button><button className="link-btn" onClick={()=>void archive(x.id)}>Archive</button></div>)}</>}
+export default function App(){
+ const auth=useAuth();const [page,setPage]=useState<Page>("overview");const [dashboard,setDashboard]=useState<Dashboard|null>(null);const [error,setError]=useState("");
+ const isAdmin=Boolean(auth.role&&adminRoles.includes(auth.role));const go=(p:Page)=>{setPage(p);window.scrollTo({top:0,behavior:"smooth"});};
+ const loadDash=useCallback(()=>{if(auth.token)apiRequest<Dashboard>("dashboard/student",{token:auth.token}).then(setDashboard).catch(e=>setError(err(e)));},[auth.token]);
+ useEffect(()=>{void loadDash()},[loadDash]);
+ if(!auth.ready)return <div className="loading">Loading workspace…</div>;
+ if(!auth.user)return <SignIn/>;
+ if(!auth.token)return <main className="login-screen"><div className="login-content"><small>AUTHENTICATING</small><h1>Preparing your workspace.</h1><ErrorBox value={auth.error??""}/></div></main>;
+ if(page==="website")return <><button className="back-button" onClick={()=>go("overview")}>← Back to workspace</button><LandingPage/></>;
+ const name=auth.profile?.full_name||auth.user.fullName||auth.user.primaryEmailAddress?.emailAddress||"Student";
+ const links=isAdmin?[...studentLinks,...adminLinks]:studentLinks;
+ let body:ReactNode;
+ switch(page){
+ case "overview":body=<><DashboardView data={dashboard} name={name} go={go}/><ErrorBox value={error}/></>;break;
+ case "roadmap":body=<Roadmap token={auth.token}/>;break;
+ case "resources":body=<Resources token={auth.token}/>;break;
+ case "bookmarks":body=<Bookmarks token={auth.token}/>;break;
+ case "events":case "projects":case "gallery":body=<CommunityPage kind={page}/>;break;
+ case "profile":body=<Profile token={auth.token} name={name} email={auth.user.primaryEmailAddress?.emailAddress??""} refresh={auth.refreshProfile}/>;break;
+ case "admin":body=<AdminOverview token={auth.token}/>;break;
+ case "users":body=<UsersAdmin token={auth.token}/>;break;
+ case "drafts":body=<DraftsAdmin token={auth.token}/>;break;
+ case "community-admin":body=<CommunityAdmin token={auth.token}/>;break;
+ default:body=<DashboardView data={dashboard} name={name} go={go}/>;
+ }
+ return <div className="workspace"><aside className="sidebar"><button className="brand" onClick={()=>go("overview")}><span>λ</span><b>ATC<span>/DSA</span><small>LEARNING HUB</small></b></button><div className="nav-links">{links.map(([key,label],i)=><button key={key} className={page===key?"nav active":"nav"} onClick={()=>go(key)}>{label}<span>↗</span></button>)}</div><button className="nav website-nav" onClick={()=>go("website")}>Club website ↗</button><div className="account"><img src={auth.user.imageUrl} alt=""/><div><b>{name}</b><small>{auth.role?.replaceAll("_"," ")??"Member"}</small></div><button title="Sign out" onClick={()=>void auth.signOut()}>↪</button></div></aside><main className="main"><header className="topbar"><span>ALAN TURING CLUB <i>/</i> {page.replaceAll("-"," ")}</span><button onClick={()=>go("profile")}>Profile ↗</button></header><div className="content">{body}</div><footer>ALAN TURING CLUB · BENNETT UNIVERSITY <span>BUILD SOMETHING THAT MATTERS.</span></footer></main></div>;
 }

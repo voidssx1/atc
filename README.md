@@ -38,7 +38,7 @@ npm ci
 npm run dev
 ```
 
-The frontend API helper is available at `frontend/src/lib/api.ts`. The current React UI is still the static club landing page; authenticated student/admin screens and feature-level API wiring are not complete in this branch yet.
+The frontend API helper is available at `frontend/src/lib/api.ts`. The React workspace now has Clerk sign-in, student learning screens, progress/bookmarks, profile, admin tools, content review and community management wired to the API. Live end-to-end verification still requires your own Clerk, Neon, Hyperdrive, email and Cloudflare configuration.
 
 ## Intentionally excluded
 
