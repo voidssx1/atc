@@ -95,6 +95,7 @@ The original club landing page remains available as a separate view. The remaini
 
 - Add GitHub repository variables `VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY`.
 - Configure your Clerk production instance: allowed origins/redirect URLs for your Pages domain, verified Bennett student email policy, and a webhook to `/api/v1/webhooks/clerk` with the required user/session events.
+- Bootstrap the first `tech_admin`: create/sign in with your verified Bennett account, then use your own Neon SQL console to promote only that account (`UPDATE users SET role = 'tech_admin' WHERE email = 'YOUR_VERIFIED_BENNETT_EMAIL' AND clerk_user_id IS NOT NULL;`). Record its Clerk user ID and database user UUID. Set `CLERK_TECH_ADMIN_USER_ID`, `ATC_TECH_ADMIN_DB_USER_ID`, `ATC_WORKER_BASE`, `ATC_FRONTEND_ORIGIN`, `CLERK_FAPI_URL`, and `DATABASE_URL` in your local shell, then run `cd backend && uv run python scripts/verify_clerk_tech_admin.py`. The verifier defaults now point to placeholders, not the previous developer’s tenant. Never reuse another account’s IDs.
 - Configure your own Neon database and Hyperdrive binding, then run Alembic migrations through revision `004_community_content`.
 - Add Cloudflare credentials and backend secrets; verify Resend/Brevo sender DNS and inbox delivery.
 - After deployment, run end-to-end checks for student sign-in, role hydration, token refresh, student progress/bookmarks, admin content approvals, community publishing, webhooks, CORS and Cron jobs.

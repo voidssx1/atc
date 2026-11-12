@@ -24,12 +24,12 @@ _SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-DEFAULT_WORKER_BASE = "https://atc-dsa-backend.webatc77.workers.dev"
-DEFAULT_CLERK_FAPI = "https://great-bug-2878.clerk.accounts.dev"
-DEFAULT_CLERK_BAPI = "https://api.clerk.com"
-DEFAULT_ORIGIN = "http://localhost:5173"
-DEFAULT_CLERK_USER_ID = "user_3LxV5nDxv4y2LDmkb6DojcZORgS"
-DEFAULT_DB_USER_ID = "5c63ff64-1144-4480-a77b-ea5ae4d65c7b"
+DEFAULT_WORKER_BASE = os.environ.get("ATC_WORKER_BASE", "https://atc-dsa-final-api.REPLACE_WITH_WORKERS_SUBDOMAIN.workers.dev")
+DEFAULT_CLERK_FAPI = os.environ.get("CLERK_FAPI_URL", "https://REPLACE_WITH_CLERK_FRONTEND_API")
+DEFAULT_CLERK_BAPI = os.environ.get("CLERK_BACKEND_API_URL", "https://api.clerk.com")
+DEFAULT_ORIGIN = os.environ.get("ATC_FRONTEND_ORIGIN", "https://atc-dsa-final-frontend.pages.dev")
+DEFAULT_CLERK_USER_ID = os.environ.get("CLERK_TECH_ADMIN_USER_ID", "REPLACE_WITH_CLERK_TECH_ADMIN_USER_ID")
+DEFAULT_DB_USER_ID = os.environ.get("ATC_TECH_ADMIN_DB_USER_ID", "REPLACE_WITH_TECH_ADMIN_DATABASE_USER_UUID")
 
 
 def decode_unverified_jwt_claims(jwt_token: str) -> Dict[str, Any]:
@@ -282,6 +282,10 @@ def main() -> int:
         help="Call POST /api/v1/auth/logout after verification checks succeed.",
     )
     args = parser.parse_args()
+
+    if (args.clerk_user_id.startswith("REPLACE_") or args.db_user_id.startswith("REPLACE_") or "REPLACE_WITH" in args.worker_base or "REPLACE_WITH" in args.origin or (not args.prompt_jwt and "REPLACE_WITH" in args.clerk_fapi)):
+        print("ERROR: Configure ATC_WORKER_BASE, ATC_FRONTEND_ORIGIN, CLERK_TECH_ADMIN_USER_ID and ATC_TECH_ADMIN_DB_USER_ID. For automatic JWT minting, also configure CLERK_FAPI_URL. Or pass the matching CLI flags.", file=sys.stderr)
+        return 1
 
     if args.prompt_jwt:
         clerk_jwt = getpass.getpass("Clerk Session JWT (input hidden): ").strip()
