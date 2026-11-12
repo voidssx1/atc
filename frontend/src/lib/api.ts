@@ -1,7 +1,12 @@
 export type ApiRequestOptions = Omit<RequestInit, "headers"> & { headers?: HeadersInit; token?: string | null };
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number, public readonly payload?: unknown) {
-    super(message); this.name = "ApiError";
+  readonly status: number;
+  readonly payload?: unknown;
+  constructor(message: string, status: number, payload?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
   }
 }
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
