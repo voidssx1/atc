@@ -1,0 +1,43 @@
+name: Run ATC database migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: final
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+
+      - name: Install migration dependencies
+        run: uv sync --extra local
+
+      - name: Apply Alembic migrations to the configured Neon database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || (echo "Missing DATABASE_URL secret" && exit 1)
+          uv run alembic current
+          uv run alembic upgrade head
+          uv run alembic current
+
+      - name: Seed starter roadmap and resources (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run python scripts/seed_initial_content.py
