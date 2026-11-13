@@ -12,7 +12,7 @@ exclude = ["**/*.pyc", "**/__pycache__/**", "**/*.c", "**/*.h", "**/*.pyi"]
 # Create a NEW Hyperdrive configuration in your Cloudflare account and paste its ID here.
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "159d7ddd2b8648688a57b6fadbbd1ad6"
+id = "65dec618c60346ba9541f4a2b5489a7e"
 
 # These namespaces are bindings for this Worker only. Keep IDs unique in your account.
 [[ratelimits]]
